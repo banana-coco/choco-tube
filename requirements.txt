@@ -4,8 +4,3 @@ python-dotenv>=1.0.0
 gunicorn>=21.0.0
 urllib3>=2.0.0
 yt-dlp
-flask
-gunicorn
-python-dotenv
-requests
-urllib3
