@@ -5,5 +5,19 @@
     "context": ".."
   },
   "forwardPorts": [5000],
-  "postStartCommand": "python app.py"
+  "postCreateCommand": "pip install -r requirements.txt",
+  "postStartCommand": "python app.py",
+  "portsAttributes": {
+    "5000": {
+      "label": "Flask App",
+      "onAutoForward": "openPreview"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python"
+      ]
+    }
+  }
 }
