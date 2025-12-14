@@ -1,0 +1,9 @@
+{
+  "name": "choco-tube",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "forwardPorts": [5000],
+  "postStartCommand": "python app.py"
+}
