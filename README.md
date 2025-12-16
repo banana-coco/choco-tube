@@ -1,3 +1,6 @@
+# render&CodeSandBox対応　これからvercelとかにも対応させる予定
+
+
 # choco-tube (チョコTube)
 
 ## Overview
