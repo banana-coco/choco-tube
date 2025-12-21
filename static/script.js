@@ -231,46 +231,18 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (isChatVisible) {
                 relatedVideosContainer.style.display = 'none';
-                chatContainer.style.display = 'block';
+                chatContainer.classList.add('active');
                 sidebarTitle.textContent = 'チャット';
                 chatToggleBtn.textContent = '📹 関連動画に戻す';
                 chatToggleBtn.style.backgroundColor = '#4CAF50';
             } else {
                 relatedVideosContainer.style.display = 'block';
-                chatContainer.style.display = 'none';
+                chatContainer.classList.remove('active');
                 sidebarTitle.textContent = '関連動画';
                 chatToggleBtn.textContent = '💬 チャット';
                 chatToggleBtn.style.backgroundColor = '';
             }
         });
-
-        const style = document.createElement('style');
-        style.textContent = `
-            .sidebar-header-with-toggle {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 16px;
-            }
-            
-            .chat-toggle-btn {
-                padding: 6px 12px;
-                font-size: 12px;
-                background: #8b4513;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                cursor: pointer;
-                transition: background 0.3s ease;
-                white-space: nowrap;
-                font-weight: 500;
-            }
-            
-            .chat-toggle-btn:hover {
-                background: #d2691e;
-            }
-        `;
-        document.head.appendChild(style);
     }
 
     const m3u8ViewBtn = document.getElementById('m3u8ViewBtn');
