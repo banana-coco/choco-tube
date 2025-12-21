@@ -20,6 +20,17 @@ app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 app.secret_key = os.environ.get('SESSION_SECRET', os.environ.get('SECRET_KEY', 'choco-tube-secret-key-2025'))
 
+@app.after_request
+def add_cache_headers(response):
+    """Add cache headers to improve performance"""
+    if response.content_type and 'text/html' in response.content_type:
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    elif response.content_type and 'application/json' in response.content_type:
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+    elif response.content_type and any(x in response.content_type for x in ['css', 'javascript', 'font']):
+        response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return response
+
 # セッションクッキーの設定（Render等のHTTPS環境で必要）
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RENDER', False) or os.environ.get('FLASK_ENV') == 'production'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -94,92 +105,36 @@ USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:92.0) Gecko/20100101 Firefox/92.0',
 ]
 
-# Invidious instances from woolisbest-4520/about-youtube repository
-INVIDIOUS_INSTANCES = [
-    'https://invidious.nerdvpn.de/',
+# Invidious instances - optimized selection with custom server support
+DEFAULT_INVIDIOUS_INSTANCES = [
+    'https://invidious.kavin.rocks/',
     'https://yewtu.be/',
-    'https://invidious.f5.si/',
+    'https://inv.vern.cc/',
     'https://vid.puffyan.us/',
     'https://invidious.snopyta.org/',
-    'https://iv.melmac.space/',
-    'https://inv.vern.cc/',
-    'https://invid-api.poketube.fun/',
-    'https://invidious.nikkosphere.com/',
-    'https://lekker.gay/',
-    'https://youtube.mosesmang.com/',
-    'https://iv.duti.dev/',
-    'https://invidious.einfachzocken.eu/',
-    'https://iv.ggtyler.dev/',
-    'https://invidious.lunar.icu/',
-    'https://invidious.kavin.rocks/',
-    'https://invidious.io.lol/',
-    'https://inv.bp.projectsegfau.lt/',
-    'https://invidious.private.coffee/',
-    'https://invidious.perennialte.ch/',
-    'https://invidious.drgns.space/',
-    'https://invidious.slipfox.xyz/',
-    'https://inv.odyssey346.dev/',
-    'https://iv.nboeck.de/',
-    'https://invidious.tiekoetter.com/',
-    'https://nyc1.iv.ggtyler.dev/',
-    'https://inv.us.projectsegfau.lt/',
-    'https://cal1.iv.ggtyler.dev/',
-    'https://invidious.lunivers.trade/',
-    'https://invidious.reallyaweso.me/',
-    'https://inv.perditum.com/',
-    'https://inv.nadeko.net/',
-    'https://inv1.nadeko.net/',
-    'https://inv2.nadeko.net/',
-    'https://inv3.nadeko.net/',
-    'https://inv4.nadeko.net/',
-    'https://inv5.nadeko.net/',
-    'https://inv6.nadeko.net/',
-    'https://inv7.nadeko.net/',
-    'https://inv8.nadeko.net/',
-    'https://inv9.nadeko.net/',
-    'https://invidious.projectsegfau.lt/',
-    'https://yt.vern.cc/',
-    'https://super8.absturztau.be/',
-    'https://inv.kamuridesu.com/',
-    'https://invidious.ritoge.com/',
-    'https://app.materialio.us/',
-    'https://yt.thechangebook.org/',
-    'https://y.com.sb/',
-    'https://invidious.ducks.party/',
 ]
 
-# Piped API instances from woolisbest-4520/about-youtube repository
-PIPED_SERVERS = [
-    'https://pipedapi.kavin.rocks',
-    'https://api-piped.mha.fi',
-    'https://pipedapi.adminforge.de',
-    'https://pipedapi.pfcd.me',
-    'https://api.piped.projectsegfau.lt',
-    'https://pipedapi.in.projectsegfau.lt',
-    'https://pipedapi.us.projectsegfau.lt',
-    'https://watchapi.whatever.social',
-    'https://api.piped.privacydev.net',
-    'https://pipedapi.aeong.one',
-    'https://pipedapi.leptons.xyz',
-    'https://piped-api.garudalinux.org',
-    'https://pipedapi.rivo.lol',
-    'https://pipedapi.colinslegacy.com',
-    'https://api.piped.yt',
-    'https://pipedapi.palveluntarjoaja.eu',
-    'https://pipedapi.smnz.de',
-    'https://pa.mint.lgbt',
-    'https://pa.il.ax',
-    'https://piped-api.privacy.com.de',
-    'https://api.piped.link',
-    'https://api.piped.lunar.icu',
-    'https://pipedapi.osphost.fi',
-    'https://pipedapi.darkness.services',
-    'https://pipedapi.ggtyler.dev',
-    'https://pipedapi.qdi.fi',
-    'https://piped-api.hostux.net',
-    'https://pipedapi.simpleprivacy.fr',
-    'https://pipedapi-libre.kavin.rocks'
+# Custom Invidious instances from environment variable (takes priority)
+CUSTOM_INVIDIOUS = [
+    server.strip() for server in os.environ.get('CUSTOM_INVIDIOUS_INSTANCES', '').split(',')
+    if server.strip()
 ]
+INVIDIOUS_INSTANCES = CUSTOM_INVIDIOUS + DEFAULT_INVIDIOUS_INSTANCES if CUSTOM_INVIDIOUS else DEFAULT_INVIDIOUS_INSTANCES
+
+# Piped API instances - optimized selection with custom server support
+DEFAULT_PIPED_SERVERS = [
+    'https://pipedapi.kavin.rocks',
+    'https://api.piped.projectsegfau.lt',
+    'https://pipedapi.ggtyler.dev',
+    'https://api.piped.yt',
+]
+
+# Custom Piped instances from environment variable (takes priority)
+CUSTOM_PIPED = [
+    server.strip() for server in os.environ.get('CUSTOM_PIPED_SERVERS', '').split(',')
+    if server.strip()
+]
+PIPED_SERVERS = CUSTOM_PIPED + DEFAULT_PIPED_SERVERS if CUSTOM_PIPED else DEFAULT_PIPED_SERVERS
 
 # Download service endpoints from woolisbest-4520/about-youtube repository
 DOWNLOAD_SERVICES = {
