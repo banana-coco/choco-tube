@@ -309,15 +309,22 @@ def get_video_info(video_id):
 
             related_videos = []
             for item in edu_data.get('related', [])[:20]:
-                related_videos.append({
-                    'id': item.get('videoId', ''),
-                    'title': item.get('title', ''),
-                    'author': item.get('channel', ''),
-                    'authorId': item.get('channelId', ''),
-                    'views': item.get('views', ''),
-                    'thumbnail': f"https://i.ytimg.com/vi/{item.get('videoId', '')}/mqdefault.jpg",
-                    'length': ''
-                })
+                try:
+                    vid_id = item.get('videoId', '')
+                    if not vid_id:
+                        continue
+                    related_videos.append({
+                        'id': vid_id,
+                        'title': item.get('title', ''),
+                        'author': item.get('channel', ''),
+                        'authorId': item.get('channelId', ''),
+                        'views': item.get('views', ''),
+                        'thumbnail': f"https://i.ytimg.com/vi/{vid_id}/mqdefault.jpg",
+                        'length': ''
+                    })
+                except Exception as e:
+                    print(f"Error processing EDU related video: {e}")
+                    continue
 
             return {
                 'title': edu_data.get('title', ''),
@@ -332,7 +339,8 @@ def get_video_info(video_id):
                 'related': related_videos,
                 'streamUrls': [],
                 'highstreamUrl': None,
-                'audioUrl': None
+                'audioUrl': None,
+                'm3u8Url': None
             }
         except Exception as e:
             print(f"EDU Video API error: {e}")
@@ -340,17 +348,28 @@ def get_video_info(video_id):
 
     recommended = data.get('recommendedVideos', data.get('recommendedvideo', []))
     related_videos = []
-    for item in recommended[:20]:
-        length_seconds = item.get('lengthSeconds', 0)
-        related_videos.append({
-            'id': item.get('videoId', ''),
-            'title': item.get('title', ''),
-            'author': item.get('author', ''),
-            'authorId': item.get('authorId', ''),
-            'views': item.get('viewCountText', ''),
-            'thumbnail': f"https://i.ytimg.com/vi/{item.get('videoId', '')}/mqdefault.jpg",
-            'length': str(datetime.timedelta(seconds=length_seconds)) if length_seconds else ''
-        })
+    
+    if recommended and isinstance(recommended, list):
+        for item in recommended[:20]:
+            try:
+                if not isinstance(item, dict):
+                    continue
+                video_id = item.get('videoId', '')
+                if not video_id:
+                    continue
+                length_seconds = item.get('lengthSeconds', 0)
+                related_videos.append({
+                    'id': video_id,
+                    'title': item.get('title', ''),
+                    'author': item.get('author', ''),
+                    'authorId': item.get('authorId', ''),
+                    'views': item.get('viewCountText', ''),
+                    'thumbnail': f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg",
+                    'length': str(datetime.timedelta(seconds=length_seconds)) if length_seconds else ''
+                })
+            except Exception as e:
+                print(f"Error processing related video: {e}")
+                continue
 
     adaptive_formats = data.get('adaptiveFormats', [])
     stream_urls = []
@@ -2052,6 +2071,37 @@ def api_convert_direct(video_id):
     except Exception as e:
         print(f"Direct convert error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/subscribed-channels')
+@login_required
+def subscribed_channels():
+    return render_template('subscribed-channels.html')
+
+@app.route('/proxy')
+@login_required
+def proxy_page():
+    return render_template('proxy.html')
+
+@app.route('/api/proxy')
+@login_required
+def api_proxy():
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': '対象URLが指定されていません'}), 400
+    
+    proxies_to_try = [
+        lambda u: http_session.get(u, headers=get_random_headers(), timeout=(5, 15)).text,
+    ]
+    
+    for attempt, proxy_func in enumerate(proxies_to_try):
+        try:
+            content = proxy_func(url)
+            return jsonify({'success': True, 'content': content}), 200
+        except Exception as e:
+            print(f"Proxy attempt {attempt + 1} failed: {e}")
+            continue
+    
+    return jsonify({'error': 'すべてのプロキシが失敗しました'}), 500
 
 @app.after_request
 def add_header(response):
