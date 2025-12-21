@@ -165,7 +165,7 @@
                 <button class="subscribe-btn" id="subscribeChannelBtn" data-channel-id="{{ video.authorId }}" data-channel-name="{{ video.author }}">
                     <span class="subscribe-icon">✦</span> チャンネル登録
                 </button>
-                <a href="/api/download/{{ video_id }}?format=audio" target="_blank" class="download-btn audio-btn">
+                <a href="/api/download-mp3/{{ video_id }}" download class="download-btn audio-btn">
                     🎵 MP3ダウンロード
                 </a>
                 {% if video.videoUrls and video.videoUrls[0] %}
