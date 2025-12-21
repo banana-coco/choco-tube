@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}登録チャンネル - チョコTube{% endblock %}
+
+{% block content %}
+<div class="static-page">
+    <div class="history-header">
+        <h1 class="page-title">✦ 登録チャンネル</h1>
+        <button class="clear-history-btn" id="clearChannelsBtn">すべて削除</button>
+    </div>
+    
+    <div class="channel-list" id="channelsList">
+        <p class="no-history">登録チャンネルを読み込み中...</p>
+    </div>
+</div>
+
+<style>
+.channel-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 16px;
+    padding: 24px;
+}
+
+.channel-card {
+    background: var(--bg-card, #2a2a4a);
+    border-radius: 12px;
+    padding: 16px;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.3s;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.channel-card:hover {
+    background: var(--bg-secondary, #1a1a2e);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.channel-card-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+
+.channel-card-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    word-break: break-word;
+}
+
+.channel-card-id {
+    font-size: 12px;
+    color: var(--text-secondary, #b8b8c8);
+    margin-bottom: 12px;
+    font-family: monospace;
+}
+
+.remove-channel-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(244, 67, 54, 0.2);
+    color: #f44336;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.remove-channel-btn:hover {
+    background: #f44336;
+    color: white;
+}
+
+.no-history {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-secondary, #b8b8c8);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const channelsList = document.getElementById('channelsList');
+    const clearBtn = document.getElementById('clearChannelsBtn');
+    
+    function loadChannels() {
+        const channels = JSON.parse(localStorage.getItem('subscribedChannels') || '[]');
+        
+        if (channels.length === 0) {
+            channelsList.innerHTML = '<p class="no-history">登録チャンネルはありません</p>';
+            return;
+        }
+        
+        let html = '';
+        channels.forEach(function(channel, index) {
+            html += '<a href="/channel/' + encodeURIComponent(channel.id) + '" class="channel-card">' +
+                '<div class="channel-card-icon">📺</div>' +
+                '<div class="channel-card-name">' + escapeHtml(channel.name) + '</div>' +
+                '<div class="channel-card-id">ID: ' + escapeHtml(channel.id.substring(0, 12)) + '...</div>' +
+                '<button class="remove-channel-btn" data-id="' + escapeHtml(channel.id) + '" title="削除">✕</button>' +
+            '</a>';
+        });
+        
+        channelsList.innerHTML = html;
+        
+        document.querySelectorAll('.remove-channel-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const channelId = this.getAttribute('data-id');
+                removeChannel(channelId);
+            });
+        });
+    }
+    
+    function removeChannel(channelId) {
+        let channels = JSON.parse(localStorage.getItem('subscribedChannels') || '[]');
+        channels = channels.filter(function(ch) {
+            return ch.id !== channelId;
+        });
+        localStorage.setItem('subscribedChannels', JSON.stringify(channels));
+        loadChannels();
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text || '';
+        return div.innerHTML;
+    }
+    
+    clearBtn.addEventListener('click', function() {
+        if (confirm('登録チャンネルをすべて削除しますか？')) {
+            localStorage.removeItem('subscribedChannels');
+            loadChannels();
+        }
+    });
+    
+    loadChannels();
+});
+</script>
+{% endblock %}
