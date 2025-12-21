@@ -6,8 +6,12 @@
     <meta name="robots" content="noindex,nofollow">
     <title>{% block title %}チョコTube{% endblock %}</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍫</text></svg>">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet"></noscript>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"
+    media="screen" loading="lazy">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -48,6 +52,36 @@
     </main>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <!-- Keep-alive ping for Render Free Plan (prevents spin-down) -->
+    <script>
+        // Ping server every 20 minutes to prevent auto-shutdown on Render Free Plan
+        const PING_INTERVAL = 20 * 60 * 1000; // 20 minutes
+        
+        function pingServer() {
+            fetch('/health', { 
+                method: 'HEAD',
+                cache: 'no-store'
+            }).catch(() => {
+                // Silent fail - app might be down, that's ok
+            });
+        }
+        
+        // Start pinging immediately
+        pingServer();
+        
+        // Then every 20 minutes
+        setInterval(pingServer, PING_INTERVAL);
+        
+        // Also ping before page unload to reset the timer
+        window.addEventListener('beforeunload', pingServer);
+        
+        // Ping when user returns to tab (after being away)
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') {
+                pingServer();
+            }
+        });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>
