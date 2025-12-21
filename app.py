@@ -2096,7 +2096,13 @@ def subscribed_channels():
 @app.route('/proxy')
 @login_required
 def proxy_page():
-    return render_template('proxy.html')
+    try:
+        with open(os.path.join(os.path.dirname(__file__), 'templates', 'proxy.html'), 'r', encoding='utf-8') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+    except Exception as e:
+        print(f"Proxy page error: {e}")
+        return jsonify({'error': 'プロキシページの読み込みに失敗しました'}), 500
 
 @app.route('/api/proxy')
 @login_required
