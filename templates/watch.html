@@ -71,24 +71,20 @@
                 <a href="/edu?v={{ video_id }}" class="player-source-btn {% if mode == 'education' %}active{% endif %}">
                     <span>🎓 Education</span>
                 </a>
-                {% if streams.m3u8 %}
                 <button id="m3u8ViewBtn" class="player-source-btn" title="m3u8リンクで視聴">
                     <span>📡 m3u8視聴</span>
                 </button>
-                {% endif %}
             </div>
             
-            {% if streams.m3u8 %}
             <div class="m3u8-section" id="m3u8Section" style="display:none; background: var(--bg-card, #2a2a4a); padding: 12px; border-radius: 8px; margin-top: 12px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                    <input type="text" id="m3u8Link" value="{{ streams.m3u8 }}" readonly style="flex: 1; padding: 8px; background: var(--bg-secondary, #1a1a2e); color: var(--text-primary, #fff); border: 1px solid var(--border-color, #2a2a4a); border-radius: 4px; font-size: 12px; font-family: monospace;">
+                    <input type="text" id="m3u8Link" value="{{ streams.m3u8 if streams.m3u8 else '' }}" placeholder="m3u8リンクをここに貼り付け" style="flex: 1; padding: 8px; background: var(--bg-secondary, #1a1a2e); color: var(--text-primary, #fff); border: 1px solid var(--border-color, #2a2a4a); border-radius: 4px; font-size: 12px; font-family: monospace;">
                     <button id="copyM3u8Btn" class="copy-btn" style="padding: 8px 16px; background: #8b4513; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.3s;">
                         📋 コピー
                     </button>
                 </div>
-                <p style="font-size: 12px; color: var(--text-secondary, #b8b8c8); margin-top: 8px;">このm3u8リンクをVLCプレイヤーやメディアプレイヤーに貼り付けて再生できます</p>
+                <p style="font-size: 12px; color: var(--text-secondary, #b8b8c8); margin-top: 8px;">{% if streams.m3u8 %}このm3u8リンクをVLCプレイヤーやメディアプレイヤーに貼り付けて再生できます{% else %}m3u8リンクが見つかりませんでした。別のプレイモードをお試しください{% endif %}</p>
             </div>
-            {% endif %}
 
             {% if mode == 'education' %}
             <div class="edu-source-selector">
