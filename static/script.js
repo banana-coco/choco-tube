@@ -340,31 +340,5 @@ document.addEventListener('DOMContentLoaded', function() {
 
         loadSubscribedChannels();
 
-        const subscribeStyle = document.createElement('style');
-        subscribeStyle.textContent = `
-            .subscribe-btn {
-                padding: 12px 24px;
-                background: #8b4513;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.3s;
-            }
-            
-            .subscribe-btn:hover {
-                background: #d2691e;
-            }
-            
-            .subscribe-btn.subscribed {
-                background: #4CAF50;
-            }
-            
-            .subscribe-btn.subscribed:hover {
-                background: #45a049;
-            }
-        `;
-        document.head.appendChild(subscribeStyle);
     }
 });
