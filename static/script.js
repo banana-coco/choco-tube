@@ -218,4 +218,156 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    const chatToggleBtn = document.getElementById('chatToggleBtn');
+    if (chatToggleBtn) {
+        const relatedVideosContainer = document.getElementById('relatedVideosContainer');
+        const chatContainer = document.getElementById('chatContainer');
+        const sidebarTitle = document.getElementById('sidebarTitle');
+        let isChatVisible = false;
+
+        chatToggleBtn.addEventListener('click', function() {
+            isChatVisible = !isChatVisible;
+            
+            if (isChatVisible) {
+                relatedVideosContainer.style.display = 'none';
+                chatContainer.style.display = 'block';
+                sidebarTitle.textContent = 'チャット';
+                chatToggleBtn.textContent = '📹 関連動画に戻す';
+                chatToggleBtn.style.backgroundColor = '#4CAF50';
+            } else {
+                relatedVideosContainer.style.display = 'block';
+                chatContainer.style.display = 'none';
+                sidebarTitle.textContent = '関連動画';
+                chatToggleBtn.textContent = '💬 チャット';
+                chatToggleBtn.style.backgroundColor = '';
+            }
+        });
+
+        const style = document.createElement('style');
+        style.textContent = `
+            .sidebar-header-with-toggle {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 16px;
+            }
+            
+            .chat-toggle-btn {
+                padding: 6px 12px;
+                font-size: 12px;
+                background: #8b4513;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: background 0.3s ease;
+                white-space: nowrap;
+                font-weight: 500;
+            }
+            
+            .chat-toggle-btn:hover {
+                background: #d2691e;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    const m3u8ViewBtn = document.getElementById('m3u8ViewBtn');
+    if (m3u8ViewBtn) {
+        const m3u8Section = document.getElementById('m3u8Section');
+        const copyM3u8Btn = document.getElementById('copyM3u8Btn');
+        const m3u8Link = document.getElementById('m3u8Link');
+        let isM3u8Visible = false;
+
+        m3u8ViewBtn.addEventListener('click', function() {
+            isM3u8Visible = !isM3u8Visible;
+            if (isM3u8Visible) {
+                m3u8Section.style.display = 'block';
+                m3u8ViewBtn.style.backgroundColor = '#4CAF50';
+            } else {
+                m3u8Section.style.display = 'none';
+                m3u8ViewBtn.style.backgroundColor = '';
+            }
+        });
+
+        copyM3u8Btn.addEventListener('click', function() {
+            if (m3u8Link.value) {
+                m3u8Link.select();
+                document.execCommand('copy');
+                
+                const originalText = copyM3u8Btn.textContent;
+                copyM3u8Btn.textContent = '✅ コピーしました!';
+                copyM3u8Btn.style.backgroundColor = '#4CAF50';
+                
+                setTimeout(function() {
+                    copyM3u8Btn.textContent = originalText;
+                    copyM3u8Btn.style.backgroundColor = '';
+                }, 2000);
+            }
+        });
+    }
+
+    const subscribeChannelBtn = document.getElementById('subscribeChannelBtn');
+    if (subscribeChannelBtn) {
+        function loadSubscribedChannels() {
+            const channels = JSON.parse(localStorage.getItem('subscribedChannels') || '[]');
+            const channelId = subscribeChannelBtn.getAttribute('data-channel-id');
+            const isSubscribed = channels.some(function(ch) { return ch.id === channelId; });
+            
+            if (isSubscribed) {
+                subscribeChannelBtn.innerHTML = '<span class="subscribe-icon">✦</span> チャンネル登録済み';
+                subscribeChannelBtn.classList.add('subscribed');
+            } else {
+                subscribeChannelBtn.innerHTML = '<span class="subscribe-icon">✦</span> チャンネル登録';
+                subscribeChannelBtn.classList.remove('subscribed');
+            }
+        }
+
+        subscribeChannelBtn.addEventListener('click', function() {
+            const channelId = this.getAttribute('data-channel-id');
+            const channelName = this.getAttribute('data-channel-name');
+            let channels = JSON.parse(localStorage.getItem('subscribedChannels') || '[]');
+            const isSubscribed = channels.some(function(ch) { return ch.id === channelId; });
+
+            if (isSubscribed) {
+                channels = channels.filter(function(ch) { return ch.id !== channelId; });
+                localStorage.setItem('subscribedChannels', JSON.stringify(channels));
+            } else {
+                channels.push({ id: channelId, name: channelName });
+                localStorage.setItem('subscribedChannels', JSON.stringify(channels));
+            }
+
+            loadSubscribedChannels();
+        });
+
+        loadSubscribedChannels();
+
+        const subscribeStyle = document.createElement('style');
+        subscribeStyle.textContent = `
+            .subscribe-btn {
+                padding: 12px 24px;
+                background: #8b4513;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s;
+            }
+            
+            .subscribe-btn:hover {
+                background: #d2691e;
+            }
+            
+            .subscribe-btn.subscribed {
+                background: #4CAF50;
+            }
+            
+            .subscribe-btn.subscribed:hover {
+                background: #45a049;
+            }
+        `;
+        document.head.appendChild(subscribeStyle);
+    }
 });
