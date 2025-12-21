@@ -672,6 +672,32 @@ def get_video_info(video_id):
             except Exception as e:
                 print(f"Error processing Invidious related video: {e}")
                 continue
+    
+    # If Invidious returned data but has no related videos, try Piped API for related videos
+    if not related_videos:
+        try:
+            piped_path = f"/streams/{urllib.parse.quote(video_id)}"
+            piped_data = request_piped_api(piped_path, timeout=(5, 15))
+            if piped_data:
+                piped_related = piped_data.get('relatedStreams', [])
+                for rel in piped_related[:20]:
+                    try:
+                        rel_video_id = rel.get('id') or (rel.get('url').split('=')[-1] if '=' in rel.get('url', '') else rel.get('url', '').split('/')[-1])
+                        if rel_video_id:
+                            related_videos.append({
+                                'id': rel_video_id,
+                                'title': rel.get('title', ''),
+                                'author': rel.get('uploader', ''),
+                                'authorId': rel.get('uploaderUrl', '').split('/')[-1] if '/' in rel.get('uploaderUrl', '') else '',
+                                'views': str(rel.get('views', '')),
+                                'thumbnail': rel.get('thumbnail', ''),
+                                'length': str(datetime.timedelta(seconds=rel.get('duration', 0))) if rel.get('duration') else ''
+                            })
+                    except Exception as e:
+                        print(f"Error processing Piped related video from fallback: {e}")
+                        continue
+        except Exception as e:
+            print(f"Error fetching Piped related videos as fallback: {e}")
 
     adaptive_formats = data.get('adaptiveFormats', [])
     stream_urls = []
@@ -753,23 +779,43 @@ def get_channel_info(channel_id):
     path = f"/channels/{urllib.parse.quote(channel_id)}"
     data = request_invidious_api(path, timeout=(5, 15))
 
+    # リトライ機構：最初の試行が失敗した場合、別のインスタンスから再度試す
+    if not data:
+        try:
+            random_instances = random.sample(INVIDIOUS_INSTANCES, min(2, len(INVIDIOUS_INSTANCES)))
+            for instance in random_instances:
+                try:
+                    url = instance + 'api/v1' + path
+                    res = http_session.get(url, headers=get_random_headers(), timeout=(4, 12))
+                    if res.status_code == 200:
+                        data = res.json()
+                        break
+                except:
+                    continue
+        except Exception as e:
+            print(f"Channel info retry error: {e}")
+    
     if not data:
         return None
 
     latest_videos = data.get('latestVideos', data.get('latestvideo', []))
     videos = []
     for item in latest_videos:
-        length_seconds = item.get('lengthSeconds', 0)
-        videos.append({
-            'type': 'video',
-            'id': item.get('videoId', ''),
-            'title': item.get('title', ''),
-            'author': data.get('author', ''),
-            'authorId': data.get('authorId', ''),
-            'published': item.get('publishedText', ''),
-            'views': item.get('viewCountText', ''),
-            'length': str(datetime.timedelta(seconds=length_seconds)) if length_seconds else ''
-        })
+        try:
+            length_seconds = item.get('lengthSeconds', 0)
+            videos.append({
+                'type': 'video',
+                'id': item.get('videoId', ''),
+                'title': item.get('title', ''),
+                'author': data.get('author', ''),
+                'authorId': data.get('authorId', ''),
+                'published': item.get('publishedText', ''),
+                'views': item.get('viewCountText', ''),
+                'length': str(datetime.timedelta(seconds=length_seconds)) if length_seconds else ''
+            })
+        except Exception as e:
+            print(f"Error processing channel video: {e}")
+            continue
 
     author_thumbnails = data.get('authorThumbnails', [])
     author_thumbnail = author_thumbnails[-1].get('url', '') if author_thumbnails else ''
@@ -796,22 +842,42 @@ def get_channel_videos(channel_id, continuation=None):
 
     data = request_invidious_api(path, timeout=(5, 15))
 
+    # リトライ機構：最初の試行が失敗した場合、別のインスタンスから再度試す
+    if not data:
+        try:
+            random_instances = random.sample(INVIDIOUS_INSTANCES, min(2, len(INVIDIOUS_INSTANCES)))
+            for instance in random_instances:
+                try:
+                    url = instance + 'api/v1' + path
+                    res = http_session.get(url, headers=get_random_headers(), timeout=(4, 12))
+                    if res.status_code == 200:
+                        data = res.json()
+                        break
+                except:
+                    continue
+        except Exception as e:
+            print(f"Channel videos retry error: {e}")
+    
     if not data:
         return None
 
     videos = []
     for item in data.get('videos', []):
-        length_seconds = item.get('lengthSeconds', 0)
-        videos.append({
-            'type': 'video',
-            'id': item.get('videoId', ''),
-            'title': item.get('title', ''),
-            'author': item.get('author', ''),
-            'authorId': item.get('authorId', ''),
-            'published': item.get('publishedText', ''),
-            'views': item.get('viewCountText', ''),
-            'length': str(datetime.timedelta(seconds=length_seconds)) if length_seconds else ''
-        })
+        try:
+            length_seconds = item.get('lengthSeconds', 0)
+            videos.append({
+                'type': 'video',
+                'id': item.get('videoId', ''),
+                'title': item.get('title', ''),
+                'author': item.get('author', ''),
+                'authorId': item.get('authorId', ''),
+                'published': item.get('publishedText', ''),
+                'views': item.get('viewCountText', ''),
+                'length': str(datetime.timedelta(seconds=length_seconds)) if length_seconds else ''
+            })
+        except Exception as e:
+            print(f"Error processing channel video: {e}")
+            continue
 
     return {
         'videos': videos,
@@ -862,25 +928,46 @@ def get_stream_url(video_id, edu_source='siawaseok'):
 
 def get_comments(video_id):
     path = f"/comments/{urllib.parse.quote(video_id)}?hl=jp"
-    data = request_invidious_api(path)
+    # コメント取得用に短いタイムアウトを使用
+    data = request_invidious_api(path, timeout=(2, 5))
 
+    if not data:
+        # 最初の試行が失敗した場合、キャッシュなしで再度試す
+        try:
+            random_instances = random.sample(INVIDIOUS_INSTANCES, min(2, len(INVIDIOUS_INSTANCES)))
+            for instance in random_instances:
+                try:
+                    url = instance + 'api/v1' + path
+                    res = http_session.get(url, headers=get_random_headers(), timeout=(2, 4))
+                    if res.status_code == 200:
+                        data = res.json()
+                        break
+                except:
+                    continue
+        except Exception as e:
+            print(f"Comment retry error: {e}")
+    
     if not data:
         return []
 
     comments = []
     for item in data.get('comments', []):
-        thumbnails = item.get('authorThumbnails', [])
-        author_thumbnail = thumbnails[-1].get('url', '') if thumbnails else ''
-        comments.append({
-            'author': item.get('author', ''),
-            'authorThumbnail': author_thumbnail,
-            'authorId': item.get('authorId', ''),
-            'content': item.get('contentHtml', '').replace('\n', '<br>'),
-            'likes': item.get('likeCount', 0),
-            'published': item.get('publishedText', '')
-        })
+        try:
+            thumbnails = item.get('authorThumbnails', [])
+            author_thumbnail = thumbnails[-1].get('url', '') if thumbnails else ''
+            comments.append({
+                'author': item.get('author', ''),
+                'authorThumbnail': author_thumbnail,
+                'authorId': item.get('authorId', ''),
+                'content': item.get('contentHtml', '').replace('\n', '<br>'),
+                'likes': item.get('likeCount', 0),
+                'published': item.get('publishedText', '')
+            })
+        except Exception as e:
+            print(f"Error processing comment: {e}")
+            continue
 
-    return comments
+    return comments[:50]  # 最大50件のコメントに制限
 
 def get_trending():
     cache_duration = 300
