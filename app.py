@@ -1112,13 +1112,8 @@ def api_internal_download(video_id):
             output_path = os.path.join(DOWNLOAD_DIR, f'chocotube_{unique_id}.mp3')
             ydl_opts = {
                 **base_opts,
-                'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                'format': 'bestaudio',
                 'outtmpl': os.path.join(DOWNLOAD_DIR, f'chocotube_{unique_id}.%(ext)s'),
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
             }
         else:
             output_path = os.path.join(DOWNLOAD_DIR, f'chocotube_{unique_id}.mp4')
@@ -1149,27 +1144,31 @@ def api_internal_download(video_id):
                 check_path = os.path.join(DOWNLOAD_DIR, f'chocotube_{unique_id}.{ext}')
                 if os.path.exists(check_path):
                     if ext == 'm4a' and not os.path.exists(output_path):
-                        import shutil
                         converted_path = os.path.join(DOWNLOAD_DIR, f'chocotube_{unique_id}_converted.mp3')
                         try:
-                            subprocess.run([
-                                'ffmpeg', '-i', check_path, '-q:a', '0', '-map', 'a', converted_path
-                            ], capture_output=True, timeout=300)
-                            if os.path.exists(converted_path):
+                            result = subprocess.run([
+                                'ffmpeg', '-i', check_path, '-vn', '-ab', '192k', '-ar', '44100', '-y', converted_path
+                            ], capture_output=True, timeout=300, check=False)
+                            if os.path.exists(converted_path) and os.path.getsize(converted_path) > 0:
+                                try:
+                                    os.remove(check_path)
+                                except:
+                                    pass
                                 return send_file(
                                     converted_path,
                                     as_attachment=True,
                                     download_name=f"{title}.mp3",
                                     mimetype='audio/mpeg'
                                 )
-                        except:
-                            pass
-                    return send_file(
-                        check_path,
-                        as_attachment=True,
-                        download_name=f"{title}.mp3",
-                        mimetype='audio/mpeg'
-                    )
+                        except Exception as e:
+                            print(f"MP3 conversion error: {e}")
+                    if ext == 'mp3':
+                        return send_file(
+                            check_path,
+                            as_attachment=True,
+                            download_name=f"{title}.mp3",
+                            mimetype='audio/mpeg'
+                        )
         else:
             if os.path.exists(output_path):
                 return send_file(
