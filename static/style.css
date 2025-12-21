@@ -992,6 +992,54 @@ body {
   font-size: 12px;
 }
 
+.sidebar-header-with-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sidebar-header-with-toggle .sidebar-title {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.chat-toggle-btn {
+  padding: 8px 12px;
+  background: var(--accent-primary, #8b4513);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.3s;
+}
+
+.chat-toggle-btn:hover {
+  background: var(--accent-secondary, #a0522d);
+}
+
+.chat-iframe-container {
+  display: none;
+  max-height: calc(100vh - 140px);
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.chat-iframe-container.active {
+  display: block;
+}
+
+.chat-iframe-container iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 8px;
+}
+
 .channel-header {
   margin-bottom: 24px;
 }
