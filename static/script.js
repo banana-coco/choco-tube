@@ -265,17 +265,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
         copyM3u8Btn.addEventListener('click', function() {
             if (m3u8Link.value) {
-                m3u8Link.select();
-                document.execCommand('copy');
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(m3u8Link.value).then(function() {
+                        const originalText = copyM3u8Btn.textContent;
+                        copyM3u8Btn.textContent = '✅ コピーしました!';
+                        copyM3u8Btn.style.backgroundColor = '#4CAF50';
+                        
+                        setTimeout(function() {
+                            copyM3u8Btn.textContent = originalText;
+                            copyM3u8Btn.style.backgroundColor = '';
+                        }, 2000);
+                    }).catch(function() {
+                        fallbackCopy();
+                    });
+                } else {
+                    fallbackCopy();
+                }
                 
-                const originalText = copyM3u8Btn.textContent;
-                copyM3u8Btn.textContent = '✅ コピーしました!';
-                copyM3u8Btn.style.backgroundColor = '#4CAF50';
-                
-                setTimeout(function() {
-                    copyM3u8Btn.textContent = originalText;
-                    copyM3u8Btn.style.backgroundColor = '';
-                }, 2000);
+                function fallbackCopy() {
+                    m3u8Link.select();
+                    try {
+                        document.execCommand('copy');
+                        const originalText = copyM3u8Btn.textContent;
+                        copyM3u8Btn.textContent = '✅ コピーしました!';
+                        copyM3u8Btn.style.backgroundColor = '#4CAF50';
+                        
+                        setTimeout(function() {
+                            copyM3u8Btn.textContent = originalText;
+                            copyM3u8Btn.style.backgroundColor = '';
+                        }, 2000);
+                    } catch(err) {
+                        copyM3u8Btn.textContent = '❌ コピー失敗';
+                        setTimeout(function() {
+                            copyM3u8Btn.textContent = '📋 コピー';
+                        }, 2000);
+                    }
+                }
             }
         });
     }
