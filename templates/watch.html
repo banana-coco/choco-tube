@@ -71,7 +71,24 @@
                 <a href="/edu?v={{ video_id }}" class="player-source-btn {% if mode == 'education' %}active{% endif %}">
                     <span>🎓 Education</span>
                 </a>
+                {% if streams.m3u8 %}
+                <button id="m3u8ViewBtn" class="player-source-btn" title="m3u8リンクで視聴">
+                    <span>📡 m3u8視聴</span>
+                </button>
+                {% endif %}
             </div>
+            
+            {% if streams.m3u8 %}
+            <div class="m3u8-section" id="m3u8Section" style="display:none; background: var(--bg-card, #2a2a4a); padding: 12px; border-radius: 8px; margin-top: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                    <input type="text" id="m3u8Link" value="{{ streams.m3u8 }}" readonly style="flex: 1; padding: 8px; background: var(--bg-secondary, #1a1a2e); color: var(--text-primary, #fff); border: 1px solid var(--border-color, #2a2a4a); border-radius: 4px; font-size: 12px; font-family: monospace;">
+                    <button id="copyM3u8Btn" class="copy-btn" style="padding: 8px 16px; background: #8b4513; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.3s;">
+                        📋 コピー
+                    </button>
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary, #b8b8c8); margin-top: 8px;">このm3u8リンクをVLCプレイヤーやメディアプレイヤーに貼り付けて再生できます</p>
+            </div>
+            {% endif %}
 
             {% if mode == 'education' %}
             <div class="edu-source-selector">
@@ -149,9 +166,17 @@
                 <button class="favorite-btn" id="favoriteBtn" data-video-id="{{ video_id }}" data-video-title="{{ video.title }}" data-video-author="{{ video.author }}">
                     <span class="favorite-icon">☆</span> お気に入りに追加
                 </button>
+                <button class="subscribe-btn" id="subscribeChannelBtn" data-channel-id="{{ video.authorId }}" data-channel-name="{{ video.author }}">
+                    <span class="subscribe-icon">✦</span> チャンネル登録
+                </button>
+                {% if video.audioUrl %}
+                <a href="{{ video.audioUrl }}" download="{{ video.title }}.mp3" class="download-btn audio-btn">
+                    🎵 MP3ダウンロード
+                </a>
+                {% endif %}
                 {% if video.videoUrls and video.videoUrls[0] %}
                 <a href="{{ video.videoUrls[0] }}" download="{{ video.title }}" class="download-btn">
-                    ⬇️ ダウンロード
+                    ⬇️ ビデオダウンロード
                 </a>
                 {% endif %}
             </div>
@@ -210,8 +235,11 @@
         </div>
         {% endif %}
         
-        <h3 class="sidebar-title">関連動画</h3>
-        <div class="related-videos">
+        <div class="sidebar-header-with-toggle">
+            <h3 class="sidebar-title" id="sidebarTitle">関連動画</h3>
+            <button id="chatToggleBtn" class="chat-toggle-btn" title="チャットに切り替える">💬 チャット</button>
+        </div>
+        <div class="related-videos" id="relatedVideosContainer">
             {% if video and video.related %}
             {% for related in video.related %}
             <a href="/{{ 'watch' if mode == 'stream' else ('w' if mode == 'high' else ('ume' if mode == 'embed' else 'edu')) }}?v={{ related.id }}" class="related-card dynamic-related-link" data-video-id="{{ related.id }}">
@@ -229,6 +257,9 @@
             </a>
             {% endfor %}
             {% endif %}
+        </div>
+        <div class="chat-iframe-container" id="chatContainer" style="display:none; height: 100%; width: 100%;">
+            <iframe id="chatIframe" src="https://bbs-be-ta2-bl9w.onrender.com" style="width: 100%; height: 100%; border: none; border-radius: 8px;"></iframe>
         </div>
     </aside>
 </div>
