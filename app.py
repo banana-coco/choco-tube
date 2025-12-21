@@ -1540,6 +1540,108 @@ TRANSLOADIT_SECRET = '4zVZ7eQm16qawPil8B4NJRr68kkCdMXQkd8NbNaq'
 FREECONVERT_API_KEY = 'api_production_15cc009b9ac13759fb43f4946b3c950fee5e56e2f0214f242f6e9e4efc3093df.69393f3ea22aa85dd55c84ff.69393fa9142a194b36417393'
 APIFY_API_TOKEN = 'apify_api_fpYkf6q1fqfJIz5S8bx4fcOeaP6CIM0iYpnu'
 
+@app.route('/api/download-mp3/<video_id>')
+@login_required
+def api_download_mp3(video_id):
+    """MP3ダウンロード（複数フォールバック方法）"""
+    unique_id = f"{video_id}_{int(time.time())}"
+    temp_audio = os.path.join(DOWNLOAD_DIR, f'chocotube_mp3_{unique_id}.webm')
+    output_mp3 = os.path.join(DOWNLOAD_DIR, f'chocotube_mp3_{unique_id}.mp3')
+    
+    # 方法1: Invidious API
+    for instance in INVIDIOUS_INSTANCES:
+        try:
+            url = f"{instance}api/v1/videos/{video_id}"
+            res = http_session.get(url, headers=get_random_headers(), timeout=10)
+            if res.status_code == 200:
+                video_info = res.json()
+                adaptive_formats = video_info.get('adaptiveFormats', [])
+                audio_url = None
+                
+                for fmt in adaptive_formats:
+                    if fmt.get('mimeType', '').startswith('audio'):
+                        audio_url = fmt.get('url')
+                        break
+                
+                if audio_url:
+                    try:
+                        res = http_session.get(audio_url, headers=get_random_headers(), timeout=60, stream=True)
+                        with open(temp_audio, 'wb') as f:
+                            for chunk in res.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                        
+                        if os.path.exists(temp_audio):
+                            subprocess.run([
+                                'ffmpeg', '-i', temp_audio, '-vn', '-ab', '192k', '-ar', '44100', '-y', output_mp3
+                            ], capture_output=True, timeout=300, check=False)
+                            
+                            try:
+                                os.remove(temp_audio)
+                            except:
+                                pass
+                            
+                            if os.path.exists(output_mp3) and os.path.getsize(output_mp3) > 0:
+                                title = video_info.get('title', video_id)
+                                return send_file(
+                                    output_mp3,
+                                    as_attachment=True,
+                                    download_name=f"{title}.mp3",
+                                    mimetype='audio/mpeg'
+                                )
+                    except Exception as e:
+                        print(f"Invidious MP3 conversion error: {e}")
+                        continue
+        except Exception as e:
+            print(f"Invidious API error ({instance}): {e}")
+            continue
+    
+    # 方法2: y2mate フォールバック
+    try:
+        print("Trying y2mate fallback for MP3 download")
+        fallback_url = f"https://dl.y2mate.is/mates/convert?id={video_id}&format=mp3&quality=128"
+        res = http_session.get(fallback_url, headers=get_random_headers(), timeout=30)
+        if res.status_code == 200:
+            return Response(
+                res.content,
+                mimetype='audio/mpeg',
+                headers={"Content-Disposition": "attachment; filename=audio.mp3"}
+            )
+    except Exception as e:
+        print(f"y2mate fallback error: {e}")
+    
+    # 方法3: Cobalt API フォールバック
+    try:
+        print("Trying Cobalt API fallback for MP3 download")
+        cobalt_url = f"https://api.cobalt.tools/api/json"
+        payload = {
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "vCodec": "h264",
+            "vQuality": "720",
+            "aFormat": "mp3",
+            "isAudioOnly": True
+        }
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+        res = http_session.post(cobalt_url, json=payload, headers=headers, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get('url'):
+                download_res = http_session.get(data['url'], timeout=60)
+                return Response(
+                    download_res.content,
+                    mimetype='audio/mpeg',
+                    headers={"Content-Disposition": "attachment; filename=audio.mp3"}
+                )
+    except Exception as e:
+        print(f"Cobalt API fallback error: {e}")
+    
+    return jsonify({
+        'success': False,
+        'error': 'MP3ダウンロードが利用できません。お手数ですが時間をおいて再度お試しください。'
+    }), 503
+
 @app.route('/api/convert/converthub/<video_id>')
 @login_required
 def api_convert_converthub(video_id):
