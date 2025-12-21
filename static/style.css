@@ -1024,8 +1024,8 @@ body {
 
 .chat-iframe-container {
   display: none;
-  max-height: calc(100vh - 100px);
-  min-height: 600px;
+  max-height: calc(100vh - 64px);
+  min-height: 700px;
   overflow: hidden;
   border-radius: 8px;
 }
