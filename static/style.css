@@ -802,9 +802,11 @@ body {
 }
 
 .watch-sidebar {
-  position: sticky;
-  top: 88px;
-  height: fit-content;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-height: calc(100vh - 88px);
+  overflow-y: auto;
 }
 
 .sidebar-title {
@@ -922,7 +924,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: calc(100vh - 140px);
+  flex-shrink: 1;
   overflow-y: auto;
 }
 
@@ -1024,32 +1026,14 @@ body {
 
 .chat-iframe-container {
   display: none;
-  height: 0;
-  overflow: hidden;
+  flex: 1;
+  min-height: 400px;
   border-radius: 8px;
+  overflow: hidden;
 }
 
 .chat-iframe-container.active {
   display: block;
-  height: auto;
-}
-
-@media (min-width: 1025px) {
-  .watch-sidebar {
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .player-wrapper {
-    min-height: auto;
-    flex-shrink: 0;
-  }
-  
-  .chat-iframe-container.active {
-    flex: 1;
-    height: auto;
-    min-height: 400px;
-  }
 }
 
 .chat-iframe-container iframe {
