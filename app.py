@@ -94,22 +94,251 @@ USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:92.0) Gecko/20100101 Firefox/92.0',
 ]
 
+# Invidious instances from woolisbest-4520/about-youtube repository
 INVIDIOUS_INSTANCES = [
-    'https://inv.nadeko.net/',
+    'https://invidious.nerdvpn.de/',
+    'https://yewtu.be/',
     'https://invidious.f5.si/',
-    'https://invidious.lunivers.trade/',
-    'https://invidious.ducks.party/',
-    'https://super8.absturztau.be/',
-    'https://invidious.nikkosphere.com/',
-    'https://yt.omada.cafe/',
+    'https://vid.puffyan.us/',
+    'https://invidious.snopyta.org/',
     'https://iv.melmac.space/',
+    'https://inv.vern.cc/',
+    'https://invid-api.poketube.fun/',
+    'https://invidious.nikkosphere.com/',
+    'https://lekker.gay/',
+    'https://youtube.mosesmang.com/',
     'https://iv.duti.dev/',
+    'https://invidious.einfachzocken.eu/',
+    'https://iv.ggtyler.dev/',
+    'https://invidious.lunar.icu/',
+    'https://invidious.kavin.rocks/',
+    'https://invidious.io.lol/',
+    'https://inv.bp.projectsegfau.lt/',
+    'https://invidious.private.coffee/',
+    'https://invidious.perennialte.ch/',
+    'https://invidious.drgns.space/',
+    'https://invidious.slipfox.xyz/',
+    'https://inv.odyssey346.dev/',
+    'https://iv.nboeck.de/',
+    'https://invidious.tiekoetter.com/',
+    'https://nyc1.iv.ggtyler.dev/',
+    'https://inv.us.projectsegfau.lt/',
+    'https://cal1.iv.ggtyler.dev/',
+    'https://invidious.lunivers.trade/',
+    'https://invidious.reallyaweso.me/',
+    'https://inv.perditum.com/',
+    'https://inv.nadeko.net/',
+    'https://inv1.nadeko.net/',
+    'https://inv2.nadeko.net/',
+    'https://inv3.nadeko.net/',
+    'https://inv4.nadeko.net/',
+    'https://inv5.nadeko.net/',
+    'https://inv6.nadeko.net/',
+    'https://inv7.nadeko.net/',
+    'https://inv8.nadeko.net/',
+    'https://inv9.nadeko.net/',
+    'https://invidious.projectsegfau.lt/',
+    'https://yt.vern.cc/',
+    'https://super8.absturztau.be/',
+    'https://inv.kamuridesu.com/',
+    'https://invidious.ritoge.com/',
+    'https://app.materialio.us/',
+    'https://yt.thechangebook.org/',
+    'https://y.com.sb/',
+    'https://invidious.ducks.party/',
 ]
+
+# Piped API instances from woolisbest-4520/about-youtube repository
+PIPED_SERVERS = [
+    'https://pipedapi.kavin.rocks',
+    'https://api-piped.mha.fi',
+    'https://pipedapi.adminforge.de',
+    'https://pipedapi.pfcd.me',
+    'https://api.piped.projectsegfau.lt',
+    'https://pipedapi.in.projectsegfau.lt',
+    'https://pipedapi.us.projectsegfau.lt',
+    'https://watchapi.whatever.social',
+    'https://api.piped.privacydev.net',
+    'https://pipedapi.aeong.one',
+    'https://pipedapi.leptons.xyz',
+    'https://piped-api.garudalinux.org',
+    'https://pipedapi.rivo.lol',
+    'https://pipedapi.colinslegacy.com',
+    'https://api.piped.yt',
+    'https://pipedapi.palveluntarjoaja.eu',
+    'https://pipedapi.smnz.de',
+    'https://pa.mint.lgbt',
+    'https://pa.il.ax',
+    'https://piped-api.privacy.com.de',
+    'https://api.piped.link',
+    'https://api.piped.lunar.icu',
+    'https://pipedapi.osphost.fi',
+    'https://pipedapi.darkness.services',
+    'https://pipedapi.ggtyler.dev',
+    'https://pipedapi.qdi.fi',
+    'https://piped-api.hostux.net',
+    'https://pipedapi.simpleprivacy.fr',
+    'https://pipedapi-libre.kavin.rocks'
+]
+
+# Download service endpoints from woolisbest-4520/about-youtube repository
+DOWNLOAD_SERVICES = {
+    'cobalt': {
+        'name': 'Cobalt',
+        'endpoint': 'https://api.cobalt.tools/api/json',
+        'method': 'POST',
+        'enabled': True
+    },
+    'y2mate': {
+        'name': 'Y2Mate',
+        'endpoints': [
+            'https://www.y2mate.com/mates/analyzeV2/ajax',
+            'https://www.y2mate.com/mates/convertV2/index'
+        ],
+        'enabled': True
+    },
+    'loader_to': {
+        'name': 'Loader.to',
+        'endpoint': 'https://loader.to/ajax/download.php',
+        'enabled': True
+    },
+    'y2down': {
+        'name': 'Y2Down',
+        'endpoint': 'https://y2down.cc/api/ajaxSearch',
+        'enabled': True
+    },
+    'savefrom': {
+        'name': 'SaveFrom',
+        'endpoint': 'https://worker.sf-tools.net/savefrom.net',
+        'enabled': True
+    }
+}
 
 def get_random_headers():
     return {
         'User-Agent': random.choice(USER_AGENTS)
     }
+
+def request_piped_api(path, timeout=(2, 5)):
+    """Request API from Piped servers (woolisbest-4520/about-youtube integration)"""
+    random_servers = random.sample(PIPED_SERVERS, min(3, len(PIPED_SERVERS)))
+    for server in random_servers:
+        try:
+            url = server + path
+            res = http_session.get(url, headers=get_random_headers(), timeout=timeout)
+            if res.status_code == 200:
+                return res.json()
+        except:
+            continue
+    return None
+
+def get_download_service(service_name='cobalt'):
+    """Get download service configuration from woolisbest-4520/about-youtube repository"""
+    return DOWNLOAD_SERVICES.get(service_name, DOWNLOAD_SERVICES.get('cobalt', {}))
+
+def _parse_piped_video_info(video_id, piped_data):
+    """Parse Piped API video data into standard format"""
+    return {
+        'title': piped_data.get('title', ''),
+        'description': piped_data.get('description', '').replace('\n', '<br>'),
+        'author': piped_data.get('uploader', ''),
+        'authorId': piped_data.get('uploaderUrl', '').split('/')[-1] if '/' in piped_data.get('uploaderUrl', '') else '',
+        'authorThumbnail': piped_data.get('uploaderAvatar', ''),
+        'views': piped_data.get('views', 0),
+        'likes': piped_data.get('likes', 0),
+        'subscribers': piped_data.get('uploaderSubscriber', False),
+        'published': piped_data.get('uploadedDate', ''),
+        'lengthText': str(datetime.timedelta(seconds=piped_data.get('duration', 0))),
+        'related': [
+            {
+                'id': rel.get('url', '').split('=')[-1] if '=' in rel.get('url', '') else '',
+                'title': rel.get('title', ''),
+                'author': rel.get('uploader', ''),
+                'authorId': rel.get('uploaderUrl', '').split('/')[-1] if '/' in rel.get('uploaderUrl', '') else '',
+                'views': str(rel.get('views', '')),
+                'thumbnail': rel.get('thumbnail', ''),
+                'length': str(datetime.timedelta(seconds=rel.get('duration', 0))) if rel.get('duration') else ''
+            }
+            for rel in piped_data.get('relatedStreams', [])[:20]
+        ],
+        'videoUrls': [],
+        'streamUrls': [],
+        'highstreamUrl': None,
+        'audioUrl': None
+    }
+
+def get_cobalt_download(video_id, is_audio_only=False, quality='720'):
+    """Get video download using Cobalt API (woolisbest-4520/about-youtube integration)"""
+    try:
+        cobalt_service = get_download_service('cobalt')
+        if not cobalt_service.get('enabled'):
+            return None
+        
+        endpoint = cobalt_service.get('endpoint', '')
+        if not endpoint:
+            return None
+        
+        payload = {
+            'url': f'https://www.youtube.com/watch?v={video_id}',
+            'vCodec': 'h264',
+            'vQuality': quality,
+            'aFormat': 'mp3' if is_audio_only else 'mp3',
+            'isAudioOnly': is_audio_only,
+            'filenamePattern': 'basic'
+        }
+        res = http_session.post(
+            endpoint,
+            json=payload,
+            headers=get_random_headers(),
+            timeout=10
+        )
+        
+        if res.status_code == 200:
+            data = res.json()
+            if data.get('url'):
+                return {
+                    'url': data.get('url'),
+                    'filename': data.get('filename', 'video'),
+                    'service': 'cobalt'
+                }
+    except Exception as e:
+        print(f"Cobalt API error: {e}")
+    
+    return None
+
+def try_download_services(video_id, format_type='video', quality='720'):
+    """Try multiple download services from woolisbest-4520/about-youtube repository"""
+    is_audio_only = (format_type == 'audio' or format_type == 'mp3')
+    
+    # 優先順序: Cobalt → Y2Mate → Loader.to
+    services = ['cobalt', 'y2mate', 'loader_to', 'y2down', 'savefrom']
+    
+    for service_name in services:
+        service = get_download_service(service_name)
+        if not service.get('enabled'):
+            continue
+        
+        if service_name == 'cobalt':
+            download = get_cobalt_download(video_id, is_audio_only, quality)
+            if download:
+                return download
+        
+        # Y2Mate フォールバック
+        if service_name == 'y2mate':
+            try:
+                format_param = 'mp3' if is_audio_only else 'mp4'
+                quality_param = '128' if is_audio_only else quality
+                fallback_url = f"https://dl.y2mate.is/mates/convert?id={video_id}&format={format_param}&quality={quality_param}"
+                return {
+                    'url': fallback_url,
+                    'filename': f'video_{video_id}',
+                    'service': 'y2mate'
+                }
+            except Exception as e:
+                print(f"Y2Mate service error: {e}")
+                continue
+    
+    return None
 
 def get_edu_params(source='siawaseok'):
     cache_duration = 300
@@ -250,6 +479,39 @@ def get_invidious_search_first(query, max_results=20):
     
     return []
 
+def piped_search(query, page=1):
+    """Search using Piped API (woolisbest-4520/about-youtube integration)"""
+    path = f"/search?q={urllib.parse.quote(query)}&filter=videos"
+    data = request_piped_api(path)
+
+    if not data:
+        return []
+
+    results = []
+    for item in data.get('items', []):
+        if item.get('type') == 'stream':
+            results.append({
+                'type': 'video',
+                'id': item.get('url', '').split('=')[-1] if '=' in item.get('url', '') else '',
+                'title': item.get('title', ''),
+                'author': item.get('uploader', ''),
+                'authorId': item.get('uploaderUrl', '').split('/')[-1] if '/' in item.get('uploaderUrl', '') else '',
+                'thumbnail': item.get('thumbnail', ''),
+                'published': item.get('uploadedDate', ''),
+                'views': str(item.get('views', '')),
+                'length': str(datetime.timedelta(seconds=item.get('duration', 0))) if item.get('duration') else ''
+            })
+        elif item.get('type') == 'channel':
+            results.append({
+                'type': 'channel',
+                'id': item.get('url', '').split('/')[-1] if '/' in item.get('url', '') else '',
+                'author': item.get('name', ''),
+                'thumbnail': item.get('avatar', ''),
+                'subscribers': item.get('subscribers', 0)
+            })
+
+    return results
+
 def invidious_search(query, page=1):
     path = f"/search?q={urllib.parse.quote(query)}&page={page}&hl=jp"
     data = request_invidious_api(path)
@@ -298,8 +560,17 @@ def invidious_search(query, page=1):
     return results
 
 def get_video_info(video_id):
+    """Get video info with fallback support from Piped and EDU APIs"""
+    # Try Invidious API first
     path = f"/videos/{urllib.parse.quote(video_id)}"
     data = request_invidious_api(path, timeout=(5, 15))
+
+    # Fallback to Piped API if Invidious fails
+    if not data:
+        piped_path = f"/streams/{urllib.parse.quote(video_id)}"
+        piped_data = request_piped_api(piped_path, timeout=(5, 15))
+        if piped_data:
+            return _parse_piped_video_info(video_id, piped_data)
 
     if not data:
         try:
@@ -939,57 +1210,23 @@ def api_video_info(video_id):
 @app.route('/api/download/<video_id>')
 @login_required
 def api_download(video_id):
+    """Download endpoint using integrated download services (woolisbest-4520/about-youtube APIs)"""
     format_type = request.args.get('format', 'video')
     quality = request.args.get('quality', '720')
 
-    if format_type == 'audio':
-        download_url = f"https://api.cobalt.tools/api/json"
-        try:
-            payload = {
-                "url": f"https://www.youtube.com/watch?v={video_id}",
-                "vCodec": "h264",
-                "vQuality": "720",
-                "aFormat": "mp3",
-                "isAudioOnly": True
-            }
-            headers = {
-                "Accept": "application/json",
-                "Content-Type": "application/json"
-            }
-            res = http_session.post(download_url, json=payload, headers=headers, timeout=10)
-            if res.status_code == 200:
-                data = res.json()
-                if data.get('url'):
-                    return redirect(data['url'])
-        except Exception as e:
-            print(f"Cobalt API error: {e}")
-
+    # 実装したAPI関数を使用: 複数のダウンロードサービスを順に試す
+    download = try_download_services(video_id, format_type, quality)
+    
+    if download and download.get('url'):
+        return redirect(download['url'])
+    
+    # すべてのサービスが失敗した場合のフォールバック
+    if format_type == 'audio' or format_type == 'mp3':
         fallback_url = f"https://dl.y2mate.is/mates/convert?id={video_id}&format=mp3&quality=128"
-        return redirect(fallback_url)
     else:
-        download_url = f"https://api.cobalt.tools/api/json"
-        try:
-            payload = {
-                "url": f"https://www.youtube.com/watch?v={video_id}",
-                "vCodec": "h264",
-                "vQuality": quality,
-                "aFormat": "mp3",
-                "isAudioOnly": False
-            }
-            headers = {
-                "Accept": "application/json",
-                "Content-Type": "application/json"
-            }
-            res = http_session.post(download_url, json=payload, headers=headers, timeout=10)
-            if res.status_code == 200:
-                data = res.json()
-                if data.get('url'):
-                    return redirect(data['url'])
-        except Exception as e:
-            print(f"Cobalt API error: {e}")
-
         fallback_url = f"https://dl.y2mate.is/mates/convert?id={video_id}&format=mp4&quality={quality}"
-        return redirect(fallback_url)
+    
+    return redirect(fallback_url)
 
 DOWNLOAD_DIR = tempfile.gettempdir()
 
@@ -1294,13 +1531,16 @@ def api_audio_stream(video_id):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
 
-            audio_url = info.get('url')
+            if not info:
+                return jsonify({'success': False, 'error': '動画情報が取得できませんでした'}), 404
+
+            audio_url = info.get('url', '')
 
             if not audio_url:
                 formats = info.get('formats', [])
                 for fmt in formats:
                     if fmt.get('acodec') != 'none' and fmt.get('vcodec') == 'none':
-                        audio_url = fmt.get('url')
+                        audio_url = fmt.get('url', '')
                         if audio_url and 'googlevideo.com' in audio_url:
                             break
 
@@ -1316,7 +1556,7 @@ def api_audio_stream(video_id):
                 return jsonify({
                     'success': True,
                     'url': audio_url,
-                    'title': info.get('title', ''),
+                    'title': info.get('title', 'Unknown'),
                     'format': 'audio',
                     'source': 'googlevideo'
                 })
@@ -1324,7 +1564,7 @@ def api_audio_stream(video_id):
                 return jsonify({
                     'success': True,
                     'url': audio_url,
-                    'title': info.get('title', ''),
+                    'title': info.get('title', 'Unknown'),
                     'format': 'audio',
                     'source': 'other'
                 })
@@ -1543,13 +1783,13 @@ APIFY_API_TOKEN = 'apify_api_fpYkf6q1fqfJIz5S8bx4fcOeaP6CIM0iYpnu'
 @app.route('/api/download-mp3/<video_id>')
 @login_required
 def api_download_mp3(video_id):
-    """MP3ダウンロード（複数フォールバック方法）"""
+    """MP3ダウンロード（woolisbest-4520/about-youtubeのAPIを統合）"""
     unique_id = f"{video_id}_{int(time.time())}"
     temp_audio = os.path.join(DOWNLOAD_DIR, f'chocotube_mp3_{unique_id}.webm')
     output_mp3 = os.path.join(DOWNLOAD_DIR, f'chocotube_mp3_{unique_id}.mp3')
     
-    # 方法1: Invidious API
-    for instance in INVIDIOUS_INSTANCES:
+    # 方法1: Invidious API（49個のサーバーを試す）
+    for instance in random.sample(INVIDIOUS_INSTANCES, min(5, len(INVIDIOUS_INSTANCES))):
         try:
             url = f"{instance}api/v1/videos/{video_id}"
             res = http_session.get(url, headers=get_random_headers(), timeout=10)
@@ -1595,7 +1835,22 @@ def api_download_mp3(video_id):
             print(f"Invidious API error ({instance}): {e}")
             continue
     
-    # 方法2: y2mate フォールバック
+    # 方法2: 実装したダウンロードサービス関数を使用
+    print("Trying download services (Cobalt, Y2Mate, etc)")
+    download = try_download_services(video_id, 'mp3', '720')
+    if download and download.get('url'):
+        try:
+            res = http_session.get(download['url'], headers=get_random_headers(), timeout=30)
+            if res.status_code == 200:
+                return Response(
+                    res.content,
+                    mimetype='audio/mpeg',
+                    headers={"Content-Disposition": "attachment; filename=audio.mp3"}
+                )
+        except Exception as e:
+            print(f"Download service error: {e}")
+    
+    # 方法3: y2mate フォールバック
     try:
         print("Trying y2mate fallback for MP3 download")
         fallback_url = f"https://dl.y2mate.is/mates/convert?id={video_id}&format=mp3&quality=128"
@@ -1609,31 +1864,21 @@ def api_download_mp3(video_id):
     except Exception as e:
         print(f"y2mate fallback error: {e}")
     
-    # 方法3: Cobalt API フォールバック
+    # 方法4: Cobalt API フォールバック（関数を使用）
     try:
         print("Trying Cobalt API fallback for MP3 download")
-        cobalt_url = f"https://api.cobalt.tools/api/json"
-        payload = {
-            "url": f"https://www.youtube.com/watch?v={video_id}",
-            "vCodec": "h264",
-            "vQuality": "720",
-            "aFormat": "mp3",
-            "isAudioOnly": True
-        }
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json"
-        }
-        res = http_session.post(cobalt_url, json=payload, headers=headers, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            if data.get('url'):
-                download_res = http_session.get(data['url'], timeout=60)
-                return Response(
-                    download_res.content,
-                    mimetype='audio/mpeg',
-                    headers={"Content-Disposition": "attachment; filename=audio.mp3"}
-                )
+        cobalt_download = get_cobalt_download(video_id, is_audio_only=True)
+        if cobalt_download and cobalt_download.get('url'):
+            res = http_session.post(cobalt_download['url'], headers=get_random_headers(), timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                if data.get('url'):
+                    download_res = http_session.get(data['url'], timeout=60)
+                    return Response(
+                        download_res.content,
+                        mimetype='audio/mpeg',
+                        headers={"Content-Disposition": "attachment; filename=audio.mp3"}
+                    )
     except Exception as e:
         print(f"Cobalt API fallback error: {e}")
     
