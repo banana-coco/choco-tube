@@ -238,6 +238,38 @@ def get_download_service(service_name='cobalt'):
 
 def _parse_piped_video_info(video_id, piped_data):
     """Parse Piped API video data into standard format"""
+    # 関連動画を取得して処理（複数の形式に対応）
+    related = []
+    try:
+        related_streams = piped_data.get('relatedStreams', [])
+        for rel in related_streams[:20]:
+            try:
+                # videoIdの取得方法を複数サポート
+                rel_video_id = None
+                if rel.get('id'):
+                    rel_video_id = rel.get('id')
+                elif rel.get('url') and '=' in rel.get('url'):
+                    rel_video_id = rel.get('url').split('=')[-1]
+                elif rel.get('url'):
+                    # URLの最後の部分がvideoId
+                    rel_video_id = rel.get('url').split('/')[-1]
+                
+                if rel_video_id:
+                    related.append({
+                        'id': rel_video_id,
+                        'title': rel.get('title', ''),
+                        'author': rel.get('uploader', ''),
+                        'authorId': rel.get('uploaderUrl', '').split('/')[-1] if '/' in rel.get('uploaderUrl', '') else '',
+                        'views': str(rel.get('views', '')),
+                        'thumbnail': rel.get('thumbnail', ''),
+                        'length': str(datetime.timedelta(seconds=rel.get('duration', 0))) if rel.get('duration') else ''
+                    })
+            except Exception as e:
+                print(f"Error parsing Piped related video: {e}")
+                continue
+    except Exception as e:
+        print(f"Error processing Piped relatedStreams: {e}")
+    
     return {
         'title': piped_data.get('title', ''),
         'description': piped_data.get('description', '').replace('\n', '<br>'),
@@ -249,18 +281,7 @@ def _parse_piped_video_info(video_id, piped_data):
         'subscribers': piped_data.get('uploaderSubscriber', False),
         'published': piped_data.get('uploadedDate', ''),
         'lengthText': str(datetime.timedelta(seconds=piped_data.get('duration', 0))),
-        'related': [
-            {
-                'id': rel.get('url', '').split('=')[-1] if '=' in rel.get('url', '') else '',
-                'title': rel.get('title', ''),
-                'author': rel.get('uploader', ''),
-                'authorId': rel.get('uploaderUrl', '').split('/')[-1] if '/' in rel.get('uploaderUrl', '') else '',
-                'views': str(rel.get('views', '')),
-                'thumbnail': rel.get('thumbnail', ''),
-                'length': str(datetime.timedelta(seconds=rel.get('duration', 0))) if rel.get('duration') else ''
-            }
-            for rel in piped_data.get('relatedStreams', [])[:20]
-        ],
+        'related': related,
         'videoUrls': [],
         'streamUrls': [],
         'highstreamUrl': None,
@@ -617,7 +638,8 @@ def get_video_info(video_id):
             print(f"EDU Video API error: {e}")
             return None
 
-    recommended = data.get('recommendedVideos', data.get('recommendedvideo', []))
+    # 複数の形式の関連動画フィールドに対応
+    recommended = data.get('recommendedVideos', data.get('recommendedvideo', data.get('recommended', [])))
     related_videos = []
     
     if recommended and isinstance(recommended, list):
@@ -625,21 +647,30 @@ def get_video_info(video_id):
             try:
                 if not isinstance(item, dict):
                     continue
-                video_id = item.get('videoId', '')
-                if not video_id:
+                
+                # videoIdを複数の形式でサポート
+                rel_video_id = item.get('videoId', item.get('id', ''))
+                if not rel_video_id:
                     continue
-                length_seconds = item.get('lengthSeconds', 0)
+                
+                length_seconds = item.get('lengthSeconds', item.get('duration', 0))
+                
+                # サムネイルURLの取得
+                thumbnail = item.get('thumbnail', f"https://i.ytimg.com/vi/{rel_video_id}/mqdefault.jpg")
+                if not thumbnail or thumbnail.startswith('http') is False:
+                    thumbnail = f"https://i.ytimg.com/vi/{rel_video_id}/mqdefault.jpg"
+                
                 related_videos.append({
-                    'id': video_id,
+                    'id': rel_video_id,
                     'title': item.get('title', ''),
-                    'author': item.get('author', ''),
+                    'author': item.get('author', item.get('uploader', '')),
                     'authorId': item.get('authorId', ''),
-                    'views': item.get('viewCountText', ''),
-                    'thumbnail': f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg",
+                    'views': item.get('viewCountText', item.get('views', '')),
+                    'thumbnail': thumbnail,
                     'length': str(datetime.timedelta(seconds=length_seconds)) if length_seconds else ''
                 })
             except Exception as e:
-                print(f"Error processing related video: {e}")
+                print(f"Error processing Invidious related video: {e}")
                 continue
 
     adaptive_formats = data.get('adaptiveFormats', [])
