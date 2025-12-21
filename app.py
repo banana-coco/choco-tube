@@ -1145,9 +1145,25 @@ def api_internal_download(video_id):
                     download_name=f"{title}.mp3",
                     mimetype='audio/mpeg'
                 )
-            for ext in ['mp3', 'm4a', 'webm', 'opus']:
+            for ext in ['mp3', 'webm', 'opus', 'm4a']:
                 check_path = os.path.join(DOWNLOAD_DIR, f'chocotube_{unique_id}.{ext}')
                 if os.path.exists(check_path):
+                    if ext == 'm4a' and not os.path.exists(output_path):
+                        import shutil
+                        converted_path = os.path.join(DOWNLOAD_DIR, f'chocotube_{unique_id}_converted.mp3')
+                        try:
+                            subprocess.run([
+                                'ffmpeg', '-i', check_path, '-q:a', '0', '-map', 'a', converted_path
+                            ], capture_output=True, timeout=300)
+                            if os.path.exists(converted_path):
+                                return send_file(
+                                    converted_path,
+                                    as_attachment=True,
+                                    download_name=f"{title}.mp3",
+                                    mimetype='audio/mpeg'
+                                )
+                        except:
+                            pass
                     return send_file(
                         check_path,
                         as_attachment=True,
@@ -1231,9 +1247,9 @@ def api_lite_download(video_id):
                 return jsonify({
                     'success': True,
                     'url': audio_url,
-                    'format': 'm4a',
+                    'format': 'mp3',
                     'quality': 'audio',
-                    'actual_format': 'm4a'
+                    'actual_format': 'mp3'
                 })
             else:
                 return jsonify({'error': '音声URLが見つかりませんでした', 'success': False}), 404
