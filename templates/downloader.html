@@ -283,9 +283,6 @@
     background: linear-gradient(135deg, #8B4513, #A0522D);
 }
 
-.download-btn-main.mp3-download {
-    background: linear-gradient(135deg, #2ECC71, #27AE60);
-}
 
 .download-btn-main.m4a-download {
     background: linear-gradient(135deg, #9B59B6, #8E44AD);
@@ -712,9 +709,6 @@
                 <button class="download-btn-main mp4-download" onclick="startDownload('mp4')">
                     <span>🎬</span> MP4をダウンロード
                 </button>
-                <button class="download-btn-main mp3-download" onclick="startDownload('mp3')">
-                    <span>🎵</span> MP3をダウンロード
-                </button>
             </div>
 
             <div id="method2Buttons" class="download-buttons-container" style="display: flex;">
@@ -728,7 +722,6 @@
                     <p class="format-section-title" style="margin-top: 16px;">🎵 音声形式</p>
                     <div class="format-grid">
                         <button class="format-btn audio-format" onclick="startDownload('m4a')">M4A</button>
-                        <button class="format-btn audio-format" onclick="startDownload('mp3')">MP3</button>
                         <button class="format-btn audio-format" onclick="startDownload('opus')">Opus</button>
                         <button class="format-btn audio-format" onclick="startDownload('ogg')">OGG</button>
                         <button class="format-btn audio-format" onclick="startDownload('wav')">WAV</button>
@@ -737,53 +730,6 @@
                 </div>
             </div>
 
-            <div id="method3Buttons" class="download-buttons-container" style="display: none;">
-                <button class="download-btn-main mp3-download" onclick="startAudioStream()">
-                    <span>🎵</span> 音声を直接ダウンロード（googlevideo）
-                </button>
-            </div>
-
-            <div id="method4Buttons" class="download-buttons-container" style="display: none;">
-                <button class="download-btn-main mp3-download" onclick="startConvert('converthub', 'mp3')">
-                    <span>🎵</span> MP3に変換（ConvertHub）
-                </button>
-                <button class="download-btn-main m4a-download" onclick="startConvert('converthub', 'wav')">
-                    <span>🎧</span> WAVに変換（ConvertHub）
-                </button>
-            </div>
-
-            <div id="method5Buttons" class="download-buttons-container" style="display: none;">
-                <button class="download-btn-main mp3-download" onclick="startConvert('transloadit', 'mp3')">
-                    <span>🎵</span> MP3に変換（Transloadit）
-                </button>
-                <button class="download-btn-main m4a-download" onclick="startConvert('transloadit', 'aac')">
-                    <span>🎧</span> AACに変換（Transloadit）
-                </button>
-            </div>
-
-            <div id="method6Buttons" class="download-buttons-container" style="display: none;">
-                <button class="download-btn-main mp3-download" onclick="startConvert('freeconvert', 'mp3')">
-                    <span>🎵</span> MP3に変換（FreeConvert）
-                </button>
-                <button class="download-btn-main m4a-download" onclick="startConvert('freeconvert', 'flac')">
-                    <span>🎧</span> FLACに変換（FreeConvert）
-                </button>
-            </div>
-
-            <div id="method7Buttons" class="download-buttons-container" style="display: none;">
-                <button class="download-btn-main mp3-download" onclick="startConvert('apify', 'mp3')">
-                    <span>🎵</span> MP3に変換（Apify）
-                </button>
-                <button class="download-btn-main m4a-download" onclick="startConvert('apify', 'ogg')">
-                    <span>🎧</span> OGGに変換（Apify）
-                </button>
-            </div>
-
-            <div id="method8Buttons" class="download-buttons-container" style="display: none;">
-                <button class="download-btn-main mp3-download" onclick="startConvert('direct', 'mp3')">
-                    <span>🎯</span> 確実にMP3をダウンロード
-                </button>
-            </div>
 
             <div class="thumbnail-quality-section">
                 <p class="format-section-title">🖼️ サムネイルダウンロード</p>
@@ -984,107 +930,6 @@ function selectMethod(method) {
     descEl.innerHTML = descriptions[method] || '';
     const methodBtns = document.getElementById(`method${method}Buttons`);
     if (methodBtns) methodBtns.style.display = 'flex';
-}
-
-async function startConvert(apiType, targetFormat) {
-    if (!currentVideoId) {
-        showError('まず動画情報を取得してください');
-        return;
-    }
-
-    hideError();
-    const apiNames = {
-        'converthub': 'ConvertHub',
-        'transloadit': 'Transloadit',
-        'freeconvert': 'FreeConvert',
-        'apify': 'Apify',
-        'direct': '確実MP3'
-    };
-    showDownloadProgress(true, `${apiNames[apiType] || apiType}で${targetFormat.toUpperCase()}に変換中...（数分かかる場合があります）`);
-
-    try {
-        const response = await fetch(`/api/convert/${apiType}/${currentVideoId}?format=${targetFormat}`);
-        const data = await response.json();
-
-        if (data.success && data.url) {
-            showDownloadProgress(true, 'ファイルを自動ダウンロード中...');
-            
-            const filename = (data.title || currentVideoId) + '.' + targetFormat;
-            
-            try {
-                const fileResponse = await fetch(data.url);
-                if (fileResponse.ok) {
-                    const blob = await fileResponse.blob();
-                    const blobUrl = window.URL.createObjectURL(blob);
-                    const downloadLink = document.createElement('a');
-                    downloadLink.href = blobUrl;
-                    downloadLink.download = filename;
-                    downloadLink.style.display = 'none';
-                    document.body.appendChild(downloadLink);
-                    downloadLink.click();
-                    document.body.removeChild(downloadLink);
-                    window.URL.revokeObjectURL(blobUrl);
-                    
-                    showDownloadProgress(false);
-                    showSuccessMessage(`${targetFormat.toUpperCase()}ファイルを自動保存しました！`);
-                } else {
-                    const fallbackLink = document.createElement('a');
-                    fallbackLink.href = data.url;
-                    fallbackLink.download = filename;
-                    fallbackLink.target = '_blank';
-                    document.body.appendChild(fallbackLink);
-                    fallbackLink.click();
-                    document.body.removeChild(fallbackLink);
-                    showDownloadProgress(false);
-                }
-            } catch (fetchError) {
-                const fallbackLink = document.createElement('a');
-                fallbackLink.href = data.url;
-                fallbackLink.download = filename;
-                fallbackLink.target = '_blank';
-                document.body.appendChild(fallbackLink);
-                fallbackLink.click();
-                document.body.removeChild(fallbackLink);
-                showDownloadProgress(false);
-            }
-        } else {
-            showDownloadProgress(false);
-            showError(data.error || '変換に失敗しました');
-        }
-    } catch (error) {
-        showDownloadProgress(false);
-        showError('変換リクエストに失敗しました');
-    }
-}
-
-async function startAudioStream() {
-    if (!currentVideoId) {
-        showError('まず動画情報を取得してください');
-        return;
-    }
-
-    hideError();
-    showDownloadProgress(true, '音声URLを取得中（googlevideo.com）...');
-
-    try {
-        const response = await fetch(`/api/audio-stream/${currentVideoId}`);
-        const data = await response.json();
-
-        if (data.success && data.url) {
-            showDownloadProgress(false);
-            if (data.url.includes('googlevideo.com')) {
-                window.open(data.url, '_blank');
-            } else {
-                showError('googlevideo.comのURLが取得できませんでした。別の方法をお試しください。');
-            }
-        } else {
-            showDownloadProgress(false);
-            showError(data.error || '音声URLの取得に失敗しました');
-        }
-    } catch (error) {
-        showDownloadProgress(false);
-        showError('音声URLの取得に失敗しました');
-    }
 }
 
 function selectThumbnailQuality(quality) {
