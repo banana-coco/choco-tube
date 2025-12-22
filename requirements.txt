@@ -5,10 +5,3 @@ gunicorn>=21.0.0
 urllib3>=2.0.0
 yt-dlp
 werkzeug>=2.0.0
-flask
-gunicorn
-python-dotenv
-requests
-urllib3
-werkzeug
-yt-dlp
