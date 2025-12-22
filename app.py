@@ -552,13 +552,23 @@ def get_ytdlp_video_info(video_id):
         opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': 'in_playlist',
-            'socket_timeout': 20,
-            'retries': 2,
+            'extract_flat': False, # 関連動画やコメントを取得するためにFalseに
+            'socket_timeout': 30,
+            'retries': 5,
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
+            },
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'web'],
+                    'player_skip': ['webpage', 'configs'],
+                }
             },
             'geo_bypass': True,
+            'geo_bypass_country': 'JP',
+            'getcomments': True, # コメント取得を有効化
         }
         
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -569,15 +579,16 @@ def get_ytdlp_video_info(video_id):
             
             # 関連動画情報の取得
             related_videos = []
-            if 'related_videos' in info and info['related_videos']:
-                for item in info['related_videos'][:20]:
+            related_data = info.get('related_videos') or info.get('entries')
+            if related_data:
+                for item in related_data[:20]:
                     try:
                         rel_video_id = item.get('id') or item.get('url', '').split('?v=')[-1].split('&')[0]
                         if rel_video_id:
                             related_videos.append({
                                 'id': rel_video_id,
                                 'title': item.get('title', ''),
-                                'author': item.get('uploader', ''),
+                                'author': item.get('uploader', item.get('channel', '')),
                                 'authorId': item.get('channel_id', ''),
                                 'views': str(item.get('view_count', '')),
                                 'thumbnail': item.get('thumbnail', f"https://i.ytimg.com/vi/{rel_video_id}/mqdefault.jpg"),
@@ -592,10 +603,10 @@ def get_ytdlp_video_info(video_id):
                 'description': info.get('description', '').replace('\n', '<br>'),
                 'author': info.get('uploader', ''),
                 'authorId': info.get('channel_id', ''),
-                'authorThumbnail': info.get('uploader_url', ''),
+                'authorThumbnail': info.get('uploader_url', ''), # Note: yt-dlp might not always provide uploader avatar directly
                 'views': info.get('view_count', 0),
                 'likes': info.get('like_count', 0),
-                'subscribers': '',
+                'subscribers': info.get('channel_follower_count', ''),
                 'published': info.get('upload_date', ''),
                 'lengthText': str(datetime.timedelta(seconds=info.get('duration', 0))),
                 'related': related_videos,
@@ -615,113 +626,185 @@ def get_video_info(video_id):
     """Get video info with fallback support - yt-dlp first (MIN-Tube2 integration)"""
     # Try yt-dlp first (MIN-Tube2 integration)
     ydlp_data = get_ytdlp_video_info(video_id)
+    
+    # 関連動画の補完（Invidiousを使用）
+    path = f"/videos/{urllib.parse.quote(video_id)}"
+    inv_data = request_invidious_api(path, timeout=(3, 8))
+    
     if ydlp_data:
+        if inv_data and not ydlp_data.get('related'):
+            recommended = inv_data.get('recommendedVideos', inv_data.get('recommended', []))
+            related = []
+            for item in recommended[:20]:
+                try:
+                    rel_id = item.get('videoId', item.get('id', ''))
+                    if rel_id:
+                        related.append({
+                            'id': rel_id,
+                            'title': item.get('title', ''),
+                            'author': item.get('author', ''),
+                            'authorId': item.get('authorId', ''),
+                            'views': item.get('viewCountText', ''),
+                            'thumbnail': f"https://i.ytimg.com/vi/{rel_id}/mqdefault.jpg",
+                            'length': str(datetime.timedelta(seconds=item.get('lengthSeconds', 0))) if item.get('lengthSeconds') else ''
+                        })
+                except: continue
+            ydlp_data['related'] = related
         return ydlp_data
     
     # Fallback to Invidious API
-    path = f"/videos/{urllib.parse.quote(video_id)}"
-    data = request_invidious_api(path, timeout=(5, 15))
-
-    # Fallback to Piped API if Invidious fails
-    if not data:
-        piped_path = f"/streams/{urllib.parse.quote(video_id)}"
-        piped_data = request_piped_api(piped_path, timeout=(5, 15))
-        if piped_data:
-            return _parse_piped_video_info(video_id, piped_data)
-
-    if not data:
-        try:
-            res = http_session.get(f"{EDU_VIDEO_API}{video_id}", headers=get_random_headers(), timeout=(2, 6))
-            res.raise_for_status()
-            edu_data = res.json()
-
-            related_videos = []
-            for item in edu_data.get('related', [])[:20]:
-                try:
-                    vid_id = item.get('videoId', '')
-                    if not vid_id:
-                        continue
+    if inv_data:
+        # Invidiousの結果を標準形式に変換して返す
+        related_videos = []
+        recommended = inv_data.get('recommendedVideos', inv_data.get('recommended', []))
+        for item in recommended[:20]:
+            try:
+                rel_id = item.get('videoId', item.get('id', ''))
+                if rel_id:
                     related_videos.append({
-                        'id': vid_id,
+                        'id': rel_id,
                         'title': item.get('title', ''),
-                        'author': item.get('channel', ''),
-                        'authorId': item.get('channelId', ''),
-                        'views': item.get('views', ''),
-                        'thumbnail': f"https://i.ytimg.com/vi/{vid_id}/mqdefault.jpg",
-                        'length': ''
+                        'author': item.get('author', ''),
+                        'authorId': item.get('authorId', ''),
+                        'views': item.get('viewCountText', ''),
+                        'thumbnail': f"https://i.ytimg.com/vi/{rel_id}/mqdefault.jpg",
+                        'length': str(datetime.timedelta(seconds=item.get('lengthSeconds', 0))) if item.get('lengthSeconds') else ''
                     })
-                except Exception as e:
-                    print(f"Error processing EDU related video: {e}")
-                    continue
+            except: continue
 
-            return {
-                'title': edu_data.get('title', ''),
-                'description': edu_data.get('description', {}).get('formatted', ''),
-                'author': edu_data.get('author', {}).get('name', ''),
-                'authorId': edu_data.get('author', {}).get('id', ''),
-                'authorThumbnail': edu_data.get('author', {}).get('thumbnail', ''),
-                'views': edu_data.get('views', ''),
-                'likes': edu_data.get('likes', ''),
-                'subscribers': edu_data.get('author', {}).get('subscribers', ''),
-                'published': edu_data.get('relativeDate', ''),
-                'related': related_videos,
-                'streamUrls': [],
-                'highstreamUrl': None,
-                'audioUrl': None,
-                'm3u8Url': None
-            }
-        except Exception as e:
-            print(f"EDU Video API error: {e}")
-            return None
+        adaptive_formats = inv_data.get('adaptiveFormats', [])
+        stream_urls = []
+        highstream_url = None
+        audio_url = None
+
+        for stream in adaptive_formats:
+            if stream.get('container') == 'webm' and stream.get('resolution'):
+                stream_urls.append({
+                    'url': stream.get('url', ''),
+                    'resolution': stream.get('resolution', '')
+                })
+                if stream.get('resolution') in ['1080p', '720p'] and not highstream_url:
+                    highstream_url = stream.get('url')
+
+        for stream in adaptive_formats:
+            if stream.get('container') == 'm4a' and stream.get('audioQuality') == 'AUDIO_QUALITY_MEDIUM':
+                audio_url = stream.get('url')
+                break
+
+        return {
+            'title': inv_data.get('title', ''),
+            'description': inv_data.get('descriptionHtml', '').replace('\n', '<br>'),
+            'author': inv_data.get('author', ''),
+            'authorId': inv_data.get('authorId', ''),
+            'authorThumbnail': inv_data.get('authorThumbnails', [{}])[-1].get('url', ''),
+            'views': inv_data.get('viewCount', 0),
+            'likes': inv_data.get('likeCount', 0),
+            'subscribers': inv_data.get('subCountText', ''),
+            'published': inv_data.get('publishedText', ''),
+            'lengthText': str(datetime.timedelta(seconds=inv_data.get('lengthSeconds', 0))),
+            'related': related_videos,
+            'videoUrls': [stream.get('url', '') for stream in reversed(inv_data.get('formatStreams', []))][:2],
+            'streamUrls': stream_urls,
+            'highstreamUrl': highstream_url,
+            'audioUrl': audio_url
+        }
+
+    # Fallback to Piped API
+    piped_path = f"/streams/{urllib.parse.quote(video_id)}"
+    piped_data = request_piped_api(piped_path, timeout=(5, 15))
+    if piped_data:
+        return _parse_piped_video_info(video_id, piped_data)
+
+    try:
+        res = http_session.get(f"{EDU_VIDEO_API}{video_id}", headers=get_random_headers(), timeout=(2, 6))
+        res.raise_for_status()
+        edu_data = res.json()
+
+        related_videos = []
+        for item in edu_data.get('related', [])[:20]:
+            try:
+                vid_id = item.get('videoId', '')
+                if not vid_id:
+                    continue
+                related_videos.append({
+                    'id': vid_id,
+                    'title': item.get('title', ''),
+                    'author': item.get('channel', ''),
+                    'authorId': item.get('channelId', ''),
+                    'views': item.get('views', ''),
+                    'thumbnail': f"https://i.ytimg.com/vi/{vid_id}/mqdefault.jpg",
+                    'length': ''
+                })
+            except Exception as e:
+                print(f"Error processing EDU related video: {e}")
+                continue
+
+        return {
+            'title': edu_data.get('title', ''),
+            'description': edu_data.get('description', {}).get('formatted', ''),
+            'author': edu_data.get('author', {}).get('name', ''),
+            'authorId': edu_data.get('author', {}).get('id', ''),
+            'authorThumbnail': edu_data.get('author', {}).get('thumbnail', ''),
+            'views': edu_data.get('views', ''),
+            'likes': edu_data.get('likes', ''),
+            'subscribers': edu_data.get('author', {}).get('subscribers', ''),
+            'published': edu_data.get('relativeDate', ''),
+            'related': related_videos,
+            'streamUrls': [],
+            'highstreamUrl': None,
+            'audioUrl': None,
+            'm3u8Url': None
+        }
+    except Exception as e:
+        print(f"EDU Video API error: {e}")
+        return None
 
     # 複数の形式の関連動画フィールドに対応
-    recommended = data.get('recommendedVideos', data.get('recommendedvideo', data.get('recommended', [])))
+    r_videos = inv_data.get('recommendedVideos', inv_data.get('recommendedvideo', inv_data.get('recommended', [])))
     related_videos = []
     
-    if recommended and isinstance(recommended, list):
-        for item in recommended[:20]:
+    if r_videos and isinstance(r_videos, list):
+        for item in r_videos[:20]:
             try:
                 if not isinstance(item, dict):
                     continue
                 
                 # videoIdを複数の形式でサポート
-                rel_video_id = item.get('videoId', item.get('id', ''))
-                if not rel_video_id:
+                r_v_id = item.get('videoId', item.get('id', ''))
+                if not r_v_id:
                     continue
                 
-                length_seconds = item.get('lengthSeconds', item.get('duration', 0))
+                l_seconds = item.get('lengthSeconds', item.get('duration', 0))
                 
                 # サムネイルURLの取得
-                thumbnail = item.get('thumbnail', f"https://i.ytimg.com/vi/{rel_video_id}/mqdefault.jpg")
-                if not thumbnail or thumbnail.startswith('http') is False:
-                    thumbnail = f"https://i.ytimg.com/vi/{rel_video_id}/mqdefault.jpg"
+                r_thumbnail = item.get('thumbnail', f"https://i.ytimg.com/vi/{r_v_id}/mqdefault.jpg")
+                if not r_thumbnail or r_thumbnail.startswith('http') is False:
+                    r_thumbnail = f"https://i.ytimg.com/vi/{r_v_id}/mqdefault.jpg"
                 
                 related_videos.append({
-                    'id': rel_video_id,
+                    'id': r_v_id,
                     'title': item.get('title', ''),
                     'author': item.get('author', item.get('uploader', '')),
                     'authorId': item.get('authorId', ''),
                     'views': item.get('viewCountText', item.get('views', '')),
-                    'thumbnail': thumbnail,
-                    'length': str(datetime.timedelta(seconds=length_seconds)) if length_seconds else ''
+                    'thumbnail': r_thumbnail,
+                    'length': str(datetime.timedelta(seconds=l_seconds)) if l_seconds else ''
                 })
-            except Exception as e:
-                print(f"Error processing Invidious related video: {e}")
-                continue
+            except: continue
     
-    # If Invidious returned data but has no related videos, try Piped API for related videos
+    # If Invidious returned results but no related videos, try Piped for related videos
     if not related_videos:
         try:
-            piped_path = f"/streams/{urllib.parse.quote(video_id)}"
-            piped_data = request_piped_api(piped_path, timeout=(5, 15))
-            if piped_data:
-                piped_related = piped_data.get('relatedStreams', [])
-                for rel in piped_related[:20]:
+            p_path = f"/streams/{urllib.parse.quote(video_id)}"
+            p_data = request_piped_api(p_path, timeout=(5, 15))
+            if p_data:
+                p_related = p_data.get('relatedStreams', [])
+                for rel in p_related[:20]:
                     try:
-                        rel_video_id = rel.get('id') or (rel.get('url').split('=')[-1] if '=' in rel.get('url', '') else rel.get('url', '').split('/')[-1])
-                        if rel_video_id:
+                        r_v_id = rel.get('id') or (rel.get('url').split('=')[-1] if '=' in rel.get('url', '') else rel.get('url', '').split('/')[-1])
+                        if r_v_id:
                             related_videos.append({
-                                'id': rel_video_id,
+                                'id': r_v_id,
                                 'title': rel.get('title', ''),
                                 'author': rel.get('uploader', ''),
                                 'authorId': rel.get('uploaderUrl', '').split('/')[-1] if '/' in rel.get('uploaderUrl', '') else '',
@@ -729,55 +812,52 @@ def get_video_info(video_id):
                                 'thumbnail': rel.get('thumbnail', ''),
                                 'length': str(datetime.timedelta(seconds=rel.get('duration', 0))) if rel.get('duration') else ''
                             })
-                    except Exception as e:
-                        print(f"Error processing Piped related video from fallback: {e}")
-                        continue
-        except Exception as e:
-            print(f"Error fetching Piped related videos as fallback: {e}")
+                    except: continue
+        except: pass
 
-    adaptive_formats = data.get('adaptiveFormats', [])
-    stream_urls = []
-    highstream_url = None
-    audio_url = None
+    a_formats = inv_data.get('adaptiveFormats', [])
+    s_urls = []
+    h_s_url = None
+    a_url = None
 
-    for stream in adaptive_formats:
+    for stream in a_formats:
         if stream.get('container') == 'webm' and stream.get('resolution'):
-            stream_urls.append({
+            s_urls.append({
                 'url': stream.get('url', ''),
                 'resolution': stream.get('resolution', '')
             })
-            if stream.get('resolution') == '1080p' and not highstream_url:
-                highstream_url = stream.get('url')
-            elif stream.get('resolution') == '720p' and not highstream_url:
-                highstream_url = stream.get('url')
+            if stream.get('resolution') == '1080p' and not h_s_url:
+                h_s_url = stream.get('url')
+            elif stream.get('resolution') == '720p' and not h_s_url:
+                h_s_url = stream.get('url')
 
-    for stream in adaptive_formats:
+    for stream in a_formats:
         if stream.get('container') == 'm4a' and stream.get('audioQuality') == 'AUDIO_QUALITY_MEDIUM':
-            audio_url = stream.get('url')
+            a_url = stream.get('url')
             break
 
-    format_streams = data.get('formatStreams', [])
-    video_urls = [stream.get('url', '') for stream in reversed(format_streams)][:2]
+    f_streams = inv_data.get('formatStreams', [])
+    v_urls = [stream.get('url', '') for stream in reversed(f_streams)][:2]
 
-    author_thumbnails = data.get('authorThumbnails', [])
-    author_thumbnail = author_thumbnails[-1].get('url', '') if author_thumbnails else ''
+    a_thumbnails = inv_data.get('authorThumbnails', [])
+    a_thumbnail = a_thumbnails[-1].get('url', '') if a_thumbnails else ''
 
     return {
-        'title': data.get('title', ''),
-        'description': data.get('descriptionHtml', '').replace('\n', '<br>'),
-        'author': data.get('author', ''),
-        'authorId': data.get('authorId', ''),
-        'authorThumbnail': author_thumbnail,
-        'views': data.get('viewCount', 0),
-        'likes': data.get('likeCount', 0),
-        'subscribers': data.get('subCountText', ''),
-        'published': data.get('publishedText', ''),
-        'lengthText': str(datetime.timedelta(seconds=data.get('lengthSeconds', 0))),
+        'title': inv_data.get('title', ''),
+        'description': inv_data.get('descriptionHtml', '').replace('\n', '<br>'),
+        'author': inv_data.get('author', ''),
+        'authorId': inv_data.get('authorId', ''),
+        'authorThumbnail': a_thumbnail,
+        'views': inv_data.get('viewCount', 0),
+        'likes': inv_data.get('likeCount', 0),
+        'subscribers': inv_data.get('subCountText', ''),
+        'published': inv_data.get('publishedText', ''),
+        'lengthText': str(datetime.timedelta(seconds=inv_data.get('lengthSeconds', 0))),
         'related': related_videos,
-        'videoUrls': video_urls,
-        'streamUrls': stream_urls,
-        'highstreamUrl': highstream_url,
-        'audioUrl': audio_url
+        'videoUrls': v_urls,
+        'streamUrls': s_urls,
+        'highstreamUrl': h_s_url,
+        'audioUrl': a_url
     }
 
 def get_playlist_info(playlist_id):
@@ -927,17 +1007,24 @@ def get_ytdlp_stream_url(video_id):
         opts = {
             'quiet': True,
             'no_warnings': True,
-            'format': 'best[ext=mp4]/best',
+            'format': 'best',
             'socket_timeout': 30,
             'retries': 5,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Referer': 'https://www.google.com/',
             },
-            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'web'],
+                    'player_skip': ['webpage', 'configs'],
+                }
+            },
             'geo_bypass': True,
             'geo_bypass_country': 'JP',
+            'nocheckcertificate': True,
         }
         
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -945,15 +1032,15 @@ def get_ytdlp_stream_url(video_id):
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
             
             if info:
-                # Check for manifest_url (m3u8) or direct url
-                url = info.get('url') or info.get('manifest_url')
+                # 可能な限り HLS (m3u8) を優先
+                url = info.get('manifest_url') or info.get('url')
                 if url:
                     return {
                         'url': url,
                         'source': 'yt-dlp',
                         'title': info.get('title', ''),
                         'ext': info.get('ext', 'mp4'),
-                        'is_m3u8': '.m3u8' in url
+                        'is_m3u8': '.m3u8' in url or info.get('protocol') == 'm3u8_native'
                     }
     except Exception as e:
         print(f"yt-dlp stream URL error for {video_id}: {e}")
@@ -1019,12 +1106,21 @@ def get_ytdlp_comments(video_id):
             'quiet': True,
             'no_warnings': True,
             'getcomments': True,
-            'socket_timeout': 15,
-            'retries': 2,
+            'socket_timeout': 30,
+            'retries': 5,
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
+            },
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'web'],
+                    'player_skip': ['webpage', 'configs'],
+                }
             },
             'geo_bypass': True,
+            'geo_bypass_country': 'JP',
         }
         
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -1034,10 +1130,20 @@ def get_ytdlp_comments(video_id):
                 comments = []
                 for item in info['comments'][:50]:
                     try:
+                        author_data = item.get('author') or {}
+                        if isinstance(author_data, str):
+                            author_name = author_data
+                            author_thumb = ''
+                            author_id = ''
+                        else:
+                            author_name = author_data.get('name', item.get('author', ''))
+                            author_thumb = author_data.get('thumbnails', [{}])[0].get('url', '')
+                            author_id = author_data.get('id', '')
+
                         comments.append({
-                            'author': item.get('author', {}).get('name') if isinstance(item.get('author'), dict) else item.get('author', ''),
-                            'authorThumbnail': item.get('author', {}).get('thumbnails', [{}])[0].get('url', '') if isinstance(item.get('author'), dict) else '',
-                            'authorId': item.get('author', {}).get('id', '') if isinstance(item.get('author'), dict) else '',
+                            'author': author_name,
+                            'authorThumbnail': author_thumb,
+                            'authorId': author_id,
                             'content': item.get('text', '').replace('\n', '<br>'),
                             'likes': item.get('like_count', 0),
                             'published': item.get('time_text', '')
@@ -1054,8 +1160,13 @@ def get_ytdlp_comments(video_id):
     return None
 
 def get_comments(video_id):
-    """Get comments - Piped first, then yt-dlp, then Invidious"""
-    # 1. Try Piped API
+    """Get comments - yt-dlp first, then Piped, then Invidious"""
+    # 1. Try yt-dlp first
+    yt_comments = get_ytdlp_comments(video_id)
+    if yt_comments:
+        return yt_comments
+
+    # 2. Try Piped API
     piped_data = request_piped_api(f"/comments/{video_id}")
     if piped_data and piped_data.get('comments'):
         comments = []
@@ -1070,11 +1181,7 @@ def get_comments(video_id):
             })
         if comments: return comments
 
-    # 2. Try yt-dlp
-    ydlp_comments = get_ytdlp_comments(video_id)
-    if ydlp_comments: return ydlp_comments
-    
-    # 3. Try Invidious
+    # 3. Try Invidious API
     path = f"/comments/{video_id}?hl=jp"
     data = request_invidious_api(path)
     if data and data.get('comments'):
@@ -1089,7 +1196,7 @@ def get_comments(video_id):
                 'published': item.get('publishedText', '')
             })
         return comments
-    
+
     return []
 
 def get_trending():
@@ -1153,6 +1260,7 @@ def login():
         password = request.form.get('password', '')
         if password == PASSWORD:
             session['logged_in'] = True
+            session.permanent = True
             return redirect(url_for('index'))
         else:
             error = 'パスワードが間違っています'
