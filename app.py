@@ -112,11 +112,11 @@ USER_AGENTS = [
 
 # Invidious instances - optimized selection with custom server support
 DEFAULT_INVIDIOUS_INSTANCES = [
-    'https://invidious.kavin.rocks/',
-    'https://yewtu.be/',
     'https://inv.vern.cc/',
-    'https://vid.puffyan.us/',
-    'https://invidious.snopyta.org/',
+    'https://invidious.nerdvpn.de/',
+    'https://inv.skynetz.xyz/',
+    'https://invidious.projectsegfau.lt/',
+    'https://yewtu.be/',
 ]
 
 # Custom Invidious instances from environment variable (takes priority)
@@ -132,6 +132,8 @@ DEFAULT_PIPED_SERVERS = [
     'https://api.piped.projectsegfau.lt',
     'https://pipedapi.ggtyler.dev',
     'https://api.piped.yt',
+    'https://pipedapi.lunar.icu',
+    'https://pipedapi.rivo.cc',
 ]
 
 # Custom Piped instances from environment variable (takes priority)
@@ -179,15 +181,19 @@ def get_random_headers():
         'User-Agent': random.choice(USER_AGENTS)
     }
 
-def request_piped_api(path, timeout=(2, 5)):
-    """Request API from Piped servers (woolisbest-4520/about-youtube integration)"""
-    random_servers = random.sample(PIPED_SERVERS, min(3, len(PIPED_SERVERS)))
-    for server in random_servers:
+def request_piped_api(path, timeout=(3, 7)):
+    """Request API from Piped servers with better rotation and error handling"""
+    # Use a fresh shuffle every time
+    servers = list(PIPED_SERVERS)
+    random.shuffle(servers)
+    
+    for server in servers[:4]:
         try:
-            url = server + path
+            url = server.rstrip('/') + path
             res = http_session.get(url, headers=get_random_headers(), timeout=timeout)
             if res.status_code == 200:
-                return res.json()
+                data = res.json()
+                if data: return data
         except:
             continue
     return None
@@ -1034,53 +1040,43 @@ def get_ytdlp_comments(video_id):
     return None
 
 def get_comments(video_id):
-    """Get comments - yt-dlp first (MIN-Tube2 integration), then fallback to Invidious"""
-    # Try yt-dlp first (MIN-Tube2 integration)
-    ydlp_comments = get_ytdlp_comments(video_id)
-    if ydlp_comments:
-        return ydlp_comments
-    
-    # Fallback to Invidious API
-    path = f"/comments/{urllib.parse.quote(video_id)}?hl=jp"
-    data = request_invidious_api(path, timeout=(2, 5))
-
-    if not data:
-        # 最初の試行が失敗した場合、キャッシュなしで再度試す
-        try:
-            random_instances = random.sample(INVIDIOUS_INSTANCES, min(2, len(INVIDIOUS_INSTANCES)))
-            for instance in random_instances:
-                try:
-                    url = instance + 'api/v1' + path
-                    res = http_session.get(url, headers=get_random_headers(), timeout=(2, 4))
-                    if res.status_code == 200:
-                        data = res.json()
-                        break
-                except:
-                    continue
-        except Exception as e:
-            print(f"Comment retry error: {e}")
-    
-    if not data:
-        return []
-
-    comments = []
-    for item in data.get('comments', []):
-        try:
-            thumbnails = item.get('authorThumbnails', [])
-            author_thumbnail = thumbnails[-1].get('url', '') if thumbnails else ''
+    """Get comments - Piped first, then yt-dlp, then Invidious"""
+    # 1. Try Piped API
+    piped_data = request_piped_api(f"/comments/{video_id}")
+    if piped_data and piped_data.get('comments'):
+        comments = []
+        for item in piped_data['comments'][:50]:
             comments.append({
                 'author': item.get('author', ''),
-                'authorThumbnail': author_thumbnail,
+                'authorThumbnail': item.get('thumbnail', ''),
+                'authorId': item.get('authorId', ''),
+                'content': item.get('commentText', '').replace('\n', '<br>'),
+                'likes': item.get('likeCount', 0),
+                'published': item.get('commentedText', '')
+            })
+        if comments: return comments
+
+    # 2. Try yt-dlp
+    ydlp_comments = get_ytdlp_comments(video_id)
+    if ydlp_comments: return ydlp_comments
+    
+    # 3. Try Invidious
+    path = f"/comments/{video_id}?hl=jp"
+    data = request_invidious_api(path)
+    if data and data.get('comments'):
+        comments = []
+        for item in data['comments'][:50]:
+            comments.append({
+                'author': item.get('author', ''),
+                'authorThumbnail': item.get('authorThumbnails', [{}])[-1].get('url', ''),
                 'authorId': item.get('authorId', ''),
                 'content': item.get('contentHtml', '').replace('\n', '<br>'),
                 'likes': item.get('likeCount', 0),
                 'published': item.get('publishedText', '')
             })
-        except Exception as e:
-            print(f"Error processing comment: {e}")
-            continue
-
-    return comments[:50]  # 最大50件のコメントに制限
+        return comments
+    
+    return []
 
 def get_trending():
     cache_duration = 300
