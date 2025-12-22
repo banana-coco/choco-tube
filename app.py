@@ -23,12 +23,13 @@ app.secret_key = os.environ.get('SESSION_SECRET', os.environ.get('SECRET_KEY', '
 @app.after_request
 def add_cache_headers(response):
     """Add cache headers to improve performance"""
-    if response.content_type and 'text/html' in response.content_type:
-        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
-    elif response.content_type and 'application/json' in response.content_type:
-        response.headers['Cache-Control'] = 'public, max-age=3600'
-    elif response.content_type and any(x in response.content_type for x in ['css', 'javascript', 'font']):
-        response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    if response.content_type:
+        if 'text/html' in response.content_type:
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+        elif 'application/json' in response.content_type:
+            response.headers['Cache-Control'] = 'public, max-age=600'  # API results 10 min
+        elif any(x in response.content_type for x in ['css', 'javascript', 'font', 'image']):
+            response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return response
 
 # セッションクッキーの設定（Render等のHTTPS環境で必要）
@@ -243,7 +244,7 @@ def _parse_piped_video_info(video_id, piped_data):
         'audioUrl': None
     }
 
-def get_cobalt_download(video_id, quality='720'):
+def get_cobalt_download(video_id, is_audio_only=False, quality='720'):
     """Get video download using Cobalt API (woolisbest-4520/about-youtube integration)"""
     try:
         cobalt_service = get_download_service('cobalt')
@@ -258,7 +259,7 @@ def get_cobalt_download(video_id, quality='720'):
             'url': f'https://www.youtube.com/watch?v={video_id}',
             'vCodec': 'h264',
             'vQuality': quality,
-            'aFormat': 'mp3' if is_audio_only else 'mp3',
+            'aFormat': 'mp3',
             'isAudioOnly': is_audio_only,
             'filenamePattern': 'basic'
         }
@@ -535,9 +536,79 @@ def invidious_search(query, page=1):
 
     return results
 
+def get_ytdlp_video_info(video_id):
+    """Get video info using yt-dlp (MIN-Tube2 integration) - tried first"""
+    try:
+        opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': 'in_playlist',
+            'socket_timeout': 20,
+            'retries': 2,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+            'geo_bypass': True,
+        }
+        
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            
+            if not info:
+                return None
+            
+            # 関連動画情報の取得
+            related_videos = []
+            if 'related_videos' in info and info['related_videos']:
+                for item in info['related_videos'][:20]:
+                    try:
+                        rel_video_id = item.get('id') or item.get('url', '').split('?v=')[-1].split('&')[0]
+                        if rel_video_id:
+                            related_videos.append({
+                                'id': rel_video_id,
+                                'title': item.get('title', ''),
+                                'author': item.get('uploader', ''),
+                                'authorId': item.get('channel_id', ''),
+                                'views': str(item.get('view_count', '')),
+                                'thumbnail': item.get('thumbnail', f"https://i.ytimg.com/vi/{rel_video_id}/mqdefault.jpg"),
+                                'length': str(datetime.timedelta(seconds=item.get('duration', 0))) if item.get('duration') else ''
+                            })
+                    except Exception as e:
+                        print(f"Error processing yt-dlp related video: {e}")
+                        continue
+            
+            return {
+                'title': info.get('title', ''),
+                'description': info.get('description', '').replace('\n', '<br>'),
+                'author': info.get('uploader', ''),
+                'authorId': info.get('channel_id', ''),
+                'authorThumbnail': info.get('uploader_url', ''),
+                'views': info.get('view_count', 0),
+                'likes': info.get('like_count', 0),
+                'subscribers': '',
+                'published': info.get('upload_date', ''),
+                'lengthText': str(datetime.timedelta(seconds=info.get('duration', 0))),
+                'related': related_videos,
+                'videoUrls': [],
+                'streamUrls': [],
+                'highstreamUrl': None,
+                'audioUrl': None,
+                'duration': info.get('duration', 0),
+                'source': 'yt-dlp'
+            }
+    except Exception as e:
+        print(f"yt-dlp video info error for {video_id}: {e}")
+    
+    return None
+
 def get_video_info(video_id):
-    """Get video info with fallback support from Piped and EDU APIs"""
-    # Try Invidious API first
+    """Get video info with fallback support - yt-dlp first (MIN-Tube2 integration)"""
+    # Try yt-dlp first (MIN-Tube2 integration)
+    ydlp_data = get_ytdlp_video_info(video_id)
+    if ydlp_data:
+        return ydlp_data
+    
+    # Fallback to Invidious API
     path = f"/videos/{urllib.parse.quote(video_id)}"
     data = request_invidious_api(path, timeout=(5, 15))
 
@@ -839,6 +910,36 @@ def get_channel_videos(channel_id, continuation=None):
         'continuation': data.get('continuation', '')
     }
 
+def get_ytdlp_stream_url(video_id):
+    """Get stream URL using yt-dlp (MIN-Tube2 integration) - tried first"""
+    try:
+        opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'format': 'best[ext=mp4]/best',
+            'socket_timeout': 15,
+            'retries': 2,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+            'geo_bypass': True,
+        }
+        
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            
+            if info and 'url' in info:
+                return {
+                    'url': info['url'],
+                    'source': 'yt-dlp',
+                    'title': info.get('title', ''),
+                    'ext': info.get('ext', 'mp4')
+                }
+    except Exception as e:
+        print(f"yt-dlp stream URL error for {video_id}: {e}")
+    
+    return None
+
 def get_stream_url(video_id, edu_source='siawaseok'):
     edu_params = get_edu_params(edu_source)
     urls = {
@@ -848,6 +949,12 @@ def get_stream_url(video_id, edu_source='siawaseok'):
         'embed': f"https://www.youtube-nocookie.com/embed/{video_id}?autoplay=1",
         'education': f"https://www.youtubeeducation.com/embed/{video_id}?{edu_params}"
     }
+
+    # yt-dlp を最初に試す (MIN-Tube2 integration)
+    ydlp_result = get_ytdlp_stream_url(video_id)
+    if ydlp_result and ydlp_result.get('url'):
+        urls['primary'] = ydlp_result['url']
+        return urls
 
     try:
         res = http_session.get(f"{STREAM_API}{video_id}", headers=get_random_headers(), timeout=(3, 6))
@@ -881,9 +988,56 @@ def get_stream_url(video_id, edu_source='siawaseok'):
 
     return urls
 
+def get_ytdlp_comments(video_id):
+    """Get comments using yt-dlp (MIN-Tube2 integration) - tried first"""
+    try:
+        opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'getcomments': True,
+            'socket_timeout': 15,
+            'retries': 2,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+            'geo_bypass': True,
+        }
+        
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            
+            if info and 'comments' in info and info['comments']:
+                comments = []
+                for item in info['comments'][:50]:
+                    try:
+                        comments.append({
+                            'author': item.get('author', {}).get('name') if isinstance(item.get('author'), dict) else item.get('author', ''),
+                            'authorThumbnail': item.get('author', {}).get('thumbnails', [{}])[0].get('url', '') if isinstance(item.get('author'), dict) else '',
+                            'authorId': item.get('author', {}).get('id', '') if isinstance(item.get('author'), dict) else '',
+                            'content': item.get('text', '').replace('\n', '<br>'),
+                            'likes': item.get('like_count', 0),
+                            'published': item.get('time_text', '')
+                        })
+                    except Exception as e:
+                        print(f"Error processing yt-dlp comment: {e}")
+                        continue
+                
+                if comments:
+                    return comments
+    except Exception as e:
+        print(f"yt-dlp comments error for {video_id}: {e}")
+    
+    return None
+
 def get_comments(video_id):
+    """Get comments - yt-dlp first (MIN-Tube2 integration), then fallback to Invidious"""
+    # Try yt-dlp first (MIN-Tube2 integration)
+    ydlp_comments = get_ytdlp_comments(video_id)
+    if ydlp_comments:
+        return ydlp_comments
+    
+    # Fallback to Invidious API
     path = f"/comments/{urllib.parse.quote(video_id)}?hl=jp"
-    # コメント取得用に短いタイムアウトを使用
     data = request_invidious_api(path, timeout=(2, 5))
 
     if not data:
@@ -1831,6 +1985,78 @@ def api_proxy():
             continue
     
     return jsonify({'error': 'すべてのプロキシが失敗しました'}), 500
+
+@app.route('/download-min-tube')
+@login_required
+def download_min_tube_page():
+    """MIN-Tube2 style download UI using yt-dlp"""
+    return render_template('download-min-tube.html')
+
+@app.route('/api/download-info')
+@login_required
+def api_download_info():
+    """Get video download information using yt-dlp (MIN-Tube2 integration)"""
+    url = request.args.get('url', '')
+    if not url:
+        return jsonify({'error': 'URLが指定されていません'}), 400
+    
+    # Extract video ID if needed
+    video_id = url
+    if 'youtube.com' in url or 'youtu.be' in url:
+        if 'v=' in url:
+            video_id = url.split('v=')[1].split('&')[0]
+        elif 'youtu.be/' in url:
+            video_id = url.split('youtu.be/')[1].split('?')[0]
+    
+    try:
+        # Use yt-dlp to get format information without downloading
+        opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'dump_single_json': True,
+            'simulate': True,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+            'socket_timeout': 30,
+            'retries': 3,
+            'geo_bypass': True,
+        }
+        
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            
+            if not info:
+                return jsonify({'error': '動画情報を取得できませんでした'}), 404
+            
+            formats = []
+            if 'formats' in info:
+                for fmt in info['formats']:
+                    if fmt.get('vcodec') != 'none' or fmt.get('acodec') != 'none':
+                        formats.append({
+                            'format_id': fmt.get('format_id', ''),
+                            'format_note': fmt.get('format_note', f"{fmt.get('width', 'N/A')}x{fmt.get('height', 'N/A')}"),
+                            'ext': fmt.get('ext', ''),
+                            'width': fmt.get('width'),
+                            'height': fmt.get('height'),
+                            'fps': fmt.get('fps'),
+                            'vcodec': fmt.get('vcodec'),
+                            'acodec': fmt.get('acodec'),
+                            'filesize': fmt.get('filesize', 0),
+                        })
+            
+            return jsonify({
+                'success': True,
+                'video_id': video_id,
+                'title': info.get('title', ''),
+                'duration': info.get('duration', 0),
+                'uploader': info.get('uploader', ''),
+                'description': info.get('description', ''),
+                'formats': formats[:20],
+            })
+    except Exception as e:
+        print(f"Download info error: {e}")
+        return jsonify({'error': f'エラー: {str(e)}'}), 500
 
 @app.after_request
 def add_header(response):
