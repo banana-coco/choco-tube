@@ -33,7 +33,7 @@ def add_cache_headers(response):
     return response
 
 # セッションクッキーの設定（Render等のHTTPS環境で必要）
-app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RENDER', False) or os.environ.get('FLASK_ENV') == 'production'
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RENDER', 'true').lower() == 'true' or os.environ.get('FLASK_ENV') == 'production'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
@@ -59,6 +59,10 @@ YOUTUBE_API_KEYS = [
     "AIzaSyDeU5zpcth2OgXDfToyc7-QnSJsDc41UGk",
     "AIzaSyClu2V_22XpCG2GTe1euD35_Mh5bn4eTjA"
 ]
+
+# ユーザー指定のキーがあれば追加
+if YOUTUBE_API_KEY and YOUTUBE_API_KEY not in YOUTUBE_API_KEYS:
+    YOUTUBE_API_KEYS.insert(0, YOUTUBE_API_KEY)
 _current_api_key_index = 0
 
 EDU_VIDEO_API = "https://siawaseok.duckdns.org/api/video2/"
@@ -287,10 +291,10 @@ def try_download_services(video_id, format_type='video', quality='720'):
     """Try multiple download services from woolisbest-4520/about-youtube repository"""
     is_audio_only = (format_type == 'audio' or format_type == 'mp3')
     
-    # 優先順序: Cobalt → Y2Mate → Loader.to
-    services = ['cobalt', 'y2mate', 'loader_to', 'y2down', 'savefrom']
+    # 優先順位: Cobalt → Y2Mate → Loader.to
+    services_to_try = ['cobalt', 'y2mate']
     
-    for service_name in services:
+    for service_name in services_to_try:
         service = get_download_service(service_name)
         if not service.get('enabled'):
             continue
@@ -1972,19 +1976,15 @@ def api_proxy():
     if not url:
         return jsonify({'error': '対象URLが指定されていません'}), 400
     
-    proxies_to_try = [
-        lambda u: http_session.get(u, headers=get_random_headers(), timeout=(5, 15)).text,
-    ]
+    if not url.startswith(('http://', 'https://')):
+        return jsonify({'error': '有効なURLではありません'}), 400
     
-    for attempt, proxy_func in enumerate(proxies_to_try):
-        try:
-            content = proxy_func(url)
-            return jsonify({'success': True, 'content': content}), 200
-        except Exception as e:
-            print(f"Proxy attempt {attempt + 1} failed: {e}")
-            continue
-    
-    return jsonify({'error': 'すべてのプロキシが失敗しました'}), 500
+    try:
+        res = http_session.get(url, headers=get_random_headers(), timeout=(5, 15))
+        return jsonify({'success': True, 'content': res.text}), 200
+    except Exception as e:
+        print(f"Proxy failed: {e}")
+        return jsonify({'error': f'プロキシエラー: {str(e)}'}), 500
 
 @app.route('/download-min-tube')
 @login_required
