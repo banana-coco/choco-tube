@@ -2,8 +2,8 @@ services:
   - type: web
     name: chocotube-app
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --keep-alive 5 --log-level info
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 600 --keep-alive 5 --log-level info
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"
@@ -15,12 +15,14 @@ services:
         value: "true"
       - key: CUSTOM_INVIDIOUS_INSTANCES
         value: "https://chocotube-proxy.onrender.com/"
+      - key: GUNICORN_CMD_ARGS
+        value: "--timeout 600"
 
   - type: web
     name: chocotube-proxy
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn "invidious_proxy:app" --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 --log-level info
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn "invidious_proxy:app" --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 300 --log-level info
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"
