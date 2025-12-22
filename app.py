@@ -923,28 +923,38 @@ def get_channel_videos(channel_id, continuation=None):
 def get_ytdlp_stream_url(video_id):
     """Get stream URL using yt-dlp (MIN-Tube2 integration) - tried first"""
     try:
+        # Use more robust options to bypass bot detection
         opts = {
             'quiet': True,
             'no_warnings': True,
             'format': 'best[ext=mp4]/best',
-            'socket_timeout': 15,
-            'retries': 2,
+            'socket_timeout': 30,
+            'retries': 5,
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
             },
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
             'geo_bypass': True,
+            'geo_bypass_country': 'JP',
         }
         
         with yt_dlp.YoutubeDL(opts) as ydl:
+            # Try to get direct info
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
             
-            if info and 'url' in info:
-                return {
-                    'url': info['url'],
-                    'source': 'yt-dlp',
-                    'title': info.get('title', ''),
-                    'ext': info.get('ext', 'mp4')
-                }
+            if info:
+                # Check for manifest_url (m3u8) or direct url
+                url = info.get('url') or info.get('manifest_url')
+                if url:
+                    return {
+                        'url': url,
+                        'source': 'yt-dlp',
+                        'title': info.get('title', ''),
+                        'ext': info.get('ext', 'mp4'),
+                        'is_m3u8': '.m3u8' in url
+                    }
     except Exception as e:
         print(f"yt-dlp stream URL error for {video_id}: {e}")
     
@@ -960,41 +970,45 @@ def get_stream_url(video_id, edu_source='siawaseok'):
         'education': f"https://www.youtubeeducation.com/embed/{video_id}?{edu_params}"
     }
 
-    # yt-dlp を最初に試す (MIN-Tube2 integration)
+    # 1. Try yt-dlp with updated robust options (MIN-Tube2 style)
     ydlp_result = get_ytdlp_stream_url(video_id)
     if ydlp_result and ydlp_result.get('url'):
+        if ydlp_result.get('is_m3u8'):
+            urls['m3u8'] = ydlp_result['url']
         urls['primary'] = ydlp_result['url']
+        # If we got a good URL, we can return early
         return urls
 
+    # 2. Try Piped API for streams as fallback
     try:
-        res = http_session.get(f"{STREAM_API}{video_id}", headers=get_random_headers(), timeout=(3, 6))
-        if res.status_code == 200:
-            data = res.json()
-            formats = data.get('formats', [])
-
+        piped_data = request_piped_api(f"/streams/{video_id}")
+        if piped_data:
+            if piped_data.get('hls'):
+                urls['m3u8'] = piped_data['hls']
+            
+            formats = piped_data.get('formats', [])
             for fmt in formats:
-                if fmt.get('itag') == '18':
-                    urls['primary'] = fmt.get('url')
+                if fmt.get('videoOnly') is False:
+                    urls['fallback'] = fmt.get('url')
+                    if not urls['primary']:
+                        urls['primary'] = fmt.get('url')
                     break
+    except:
+        pass
 
-            if not urls['primary']:
+    # 3. Last resort fallback to other APIs
+    if not urls['primary']:
+        try:
+            res = http_session.get(f"{STREAM_API}{video_id}", headers=get_random_headers(), timeout=(3, 6))
+            if res.status_code == 200:
+                data = res.json()
+                formats = data.get('formats', [])
                 for fmt in formats:
-                    if fmt.get('url') and fmt.get('vcodec') != 'none':
-                        urls['fallback'] = fmt.get('url')
+                    if fmt.get('itag') == '18':
+                        urls['primary'] = fmt.get('url')
                         break
-    except:
-        pass
-
-    try:
-        res = http_session.get(f"{M3U8_API}{video_id}", headers=get_random_headers(), timeout=(3, 6))
-        if res.status_code == 200:
-            data = res.json()
-            m3u8_formats = data.get('m3u8_formats', [])
-            if m3u8_formats:
-                best = max(m3u8_formats, key=lambda x: int(x.get('resolution', '0x0').split('x')[-1] or 0))
-                urls['m3u8'] = best.get('url')
-    except:
-        pass
+        except:
+            pass
 
     return urls
 
