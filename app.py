@@ -221,14 +221,21 @@ def _parse_piped_video_info(video_id, piped_data):
                     rel_video_id = rel.get('url').split('/')[-1]
                 
                 if rel_video_id:
+                    length_text = str(datetime.timedelta(seconds=rel.get('duration', 0))) if rel.get('duration') else ''
                     related.append({
+                        # 既存のキー名（現在の機能保持）
                         'id': rel_video_id,
                         'title': rel.get('title', ''),
                         'author': rel.get('uploader', ''),
                         'authorId': rel.get('uploaderUrl', '').split('/')[-1] if '/' in rel.get('uploaderUrl', '') else '',
                         'views': str(rel.get('views', '')),
                         'thumbnail': rel.get('thumbnail', ''),
-                        'length': str(datetime.timedelta(seconds=rel.get('duration', 0))) if rel.get('duration') else ''
+                        'length': length_text,
+                        # 参考リポジトリのキー名（新機能対応）
+                        'video_id': rel_video_id,
+                        'author_id': rel.get('uploaderUrl', '').split('/')[-1] if '/' in rel.get('uploaderUrl', '') else '',
+                        'view_count_text': str(rel.get('views', '')),
+                        'length_text': length_text
                     })
             except Exception as e:
                 print(f"Error parsing Piped related video: {e}")
@@ -587,14 +594,21 @@ def get_ytdlp_video_info(video_id):
                     try:
                         rel_video_id = item.get('id') or item.get('url', '').split('?v=')[-1].split('&')[0]
                         if rel_video_id:
+                            length_text = str(datetime.timedelta(seconds=item.get('duration', 0))) if item.get('duration') else ''
                             related_videos.append({
+                                # 既存のキー名（現在の機能保持）
                                 'id': rel_video_id,
                                 'title': item.get('title', ''),
                                 'author': item.get('uploader', item.get('channel', '')),
                                 'authorId': item.get('channel_id', ''),
                                 'views': str(item.get('view_count', '')),
                                 'thumbnail': item.get('thumbnail', f"https://i.ytimg.com/vi/{rel_video_id}/mqdefault.jpg"),
-                                'length': str(datetime.timedelta(seconds=item.get('duration', 0))) if item.get('duration') else ''
+                                'length': length_text,
+                                # 参考リポジトリのキー名（新機能対応）
+                                'video_id': rel_video_id,
+                                'author_id': item.get('channel_id', ''),
+                                'view_count_text': str(item.get('view_count', '')),
+                                'length_text': length_text
                             })
                     except Exception as e:
                         print(f"Error processing yt-dlp related video: {e}")
@@ -635,20 +649,31 @@ def format_related_video(related_data: dict) -> dict:
         return {
             "type": "playlist",
             "title": related_data.get("title", ''),
+            # 既存のキー名
             "id": related_data.get('playlistId', ''),
+            # 参考リポジトリのキー名
+            "video_id": related_data.get('playlistId', ''),
             "author": related_data.get("channel", ''),
             "thumbnail": thumbnail_url
         }
     
+    vid_id = related_data.get("videoId", '')
+    length_text = related_data.get("badge", '')
     return {
         "type": "video",
-        "id": related_data.get("videoId", ''),
+        # 既存のキー名
+        "id": vid_id,
         "title": related_data.get("title", ''),
         "author": related_data.get("channel", ''),
         "authorId": related_data.get("channelId", ''),
         "views": related_data.get("views", ''),
         "thumbnail": thumbnail_url,
-        "length": related_data.get("badge", '')
+        "length": length_text,
+        # 参考リポジトリのキー名
+        "video_id": vid_id,
+        "author_id": related_data.get("channelId", ''),
+        "view_count_text": related_data.get("views", ''),
+        "length_text": length_text
     }
 
 def get_video_info(video_id):
@@ -691,21 +716,29 @@ def get_video_info(video_id):
     inv_data = request_invidious_api(path, timeout=(3, 8))
     
     if inv_data:
-        # Invidiousの結果を標準形式に変換して返す
+        # Invidiousの結果を標準形式に変換して返す (参考リポジトリと同じ形式)
         related_videos = []
-        recommended = inv_data.get('recommendedVideos', inv_data.get('recommended', []))
+        # recommendedvideo, recommendedVideos, recommended の全てに対応
+        recommended = inv_data.get('recommendedvideo', inv_data.get('recommendedVideos', inv_data.get('recommended', [])))
         for item in recommended[:20]:
             try:
                 rel_id = item.get('videoId', item.get('id', ''))
                 if rel_id:
+                    length_text = str(datetime.timedelta(seconds=item.get('lengthSeconds', 0))) if item.get('lengthSeconds') else ''
                     related_videos.append({
+                        # 既存のキー名（現在の機能保持）
                         'id': rel_id,
                         'title': item.get('title', ''),
                         'author': item.get('author', ''),
                         'authorId': item.get('authorId', ''),
                         'views': item.get('viewCountText', ''),
                         'thumbnail': f"https://i.ytimg.com/vi/{rel_id}/mqdefault.jpg",
-                        'length': str(datetime.timedelta(seconds=item.get('lengthSeconds', 0))) if item.get('lengthSeconds') else ''
+                        'length': length_text,
+                        # 参考リポジトリのキー名（新機能対応）
+                        'video_id': rel_id,
+                        'author_id': item.get('authorId', ''),
+                        'view_count_text': item.get('viewCountText', ''),
+                        'length_text': length_text
                     })
             except: continue
 
@@ -714,15 +747,26 @@ def get_video_info(video_id):
         highstream_url = None
         audio_url = None
 
+        # 参考リポジトリと同じ: webm の全ストリームを streamUrls に格納
         for stream in adaptive_formats:
             if stream.get('container') == 'webm' and stream.get('resolution'):
                 stream_urls.append({
                     'url': stream.get('url', ''),
                     'resolution': stream.get('resolution', '')
                 })
-                if stream.get('resolution') in ['1080p', '720p'] and not highstream_url:
-                    highstream_url = stream.get('url')
 
+        # 参考リポジトリと同じ: 1080p を優先、次に 720p
+        for stream in adaptive_formats:
+            if stream.get('container') == 'webm' and stream.get('resolution') == '1080p':
+                highstream_url = stream.get('url')
+                break
+        if not highstream_url:
+            for stream in adaptive_formats:
+                if stream.get('container') == 'webm' and stream.get('resolution') == '720p':
+                    highstream_url = stream.get('url')
+                    break
+
+        # 参考リポジトリと同じ: m4a 音声を取得
         for stream in adaptive_formats:
             if stream.get('container') == 'm4a' and stream.get('audioQuality') == 'AUDIO_QUALITY_MEDIUM':
                 audio_url = stream.get('url')
