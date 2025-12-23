@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube ダウンローダー - choco-tube</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --card: #f7f9fc;
+      --muted: #eef2f7;
+      --ink: #0b1220;
+      --ink-3: #5a6b8a;
+      --brand: #2563eb;
+      --brand-2: #1e40af;
+      --accent: #10b981;
+      --shadow-lg: 0 30px 60px -15px rgba(17,24,39,.2);
+      --radius-2: 14px;
+      --radius-0: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: var(--ink);
+      background: linear-gradient(135deg, rgba(37,99,235,.08), transparent), var(--bg);
+      padding: 20px;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0 0 8px;
+      font-weight: 800;
+    }
+    .subtitle {
+      color: var(--ink-3);
+      font-size: 14px;
+      margin: 0;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--muted);
+      border-radius: var(--radius-2);
+      box-shadow: var(--shadow-lg);
+      padding: 28px;
+      margin-bottom: 20px;
+    }
+    .input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid var(--muted);
+      border-radius: var(--radius-0);
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 4px rgba(37,99,235,0.1);
+    }
+    button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: var(--radius-0);
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      color: white;
+    }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-secondary {
+      background: var(--muted);
+      color: var(--ink);
+    }
+    .btn-secondary:hover { background: #e5ecf3; }
+    #results {
+      margin-top: 20px;
+    }
+    .format-item {
+      background: white;
+      border: 1px solid var(--muted);
+      border-radius: var(--radius-0);
+      padding: 12px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+    }
+    .format-info {
+      flex: 1;
+    }
+    .format-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ink);
+    }
+    .format-detail {
+      font-size: 12px;
+      color: var(--ink-3);
+      margin-top: 4px;
+    }
+    .error {
+      background: #fee;
+      color: #c00;
+      padding: 12px;
+      border-radius: var(--radius-0);
+      margin-bottom: 15px;
+    }
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: var(--ink-3);
+    }
+    .spinner {
+      border: 3px solid var(--muted);
+      border-top: 3px solid var(--brand);
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+    }
+    select {
+      padding: 8px 12px;
+      border: 1px solid var(--muted);
+      border-radius: var(--radius-0);
+      font-size: 13px;
+      outline: none;
+    }
+    select:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 4px rgba(37,99,235,0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎥 YouTube ダウンローダー</h1>
+      <p class="subtitle">yt-dlp を使用した高速ダウンロード</p>
+    </header>
+
+    <div class="panel">
+      <form id="downloadForm">
+        <div class="input-group">
+          <input 
+            type="text" 
+            id="urlInput" 
+            placeholder="YouTubeリンクまたはビデオID (例: https://www.youtube.com/watch?v=...)"
+            required
+          />
+          <button type="submit" class="btn-primary">分析</button>
+          <button type="button" class="btn-secondary" onclick="document.getElementById('urlInput').value = ''; resetUI();">
+            クリア
+          </button>
+        </div>
+      </form>
+
+      <div class="controls">
+        <select id="qualityFilter" onchange="applyFilters()">
+          <option value="">すべての品質</option>
+          <option value="1080">1080p</option>
+          <option value="720">720p</option>
+          <option value="480">480p以下</option>
+        </select>
+        <select id="typeFilter" onchange="applyFilters()">
+          <option value="">すべてのタイプ</option>
+          <option value="video">動画</option>
+          <option value="audio">音声</option>
+        </select>
+      </div>
+
+      <div id="results"></div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('downloadForm');
+    const urlInput = document.getElementById('urlInput');
+    const resultsDiv = document.getElementById('results');
+    let currentData = null;
+    let allFormats = [];
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = urlInput.value.trim();
+      if (!url) return;
+      
+      resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div>ダウンロード情報を取得中...</div>';
+      
+      try {
+        const response = await fetch(`/api/download-info?url=${encodeURIComponent(url)}`);
+        const data = await response.json();
+        
+        if (data.error) {
+          resultsDiv.innerHTML = `<div class="error">エラー: ${data.error}</div>`;
+          return;
+        }
+        
+        currentData = data;
+        allFormats = data.formats || [];
+        renderResults(data);
+      } catch (err) {
+        resultsDiv.innerHTML = `<div class="error">エラー: ${err.message}</div>`;
+      }
+    });
+
+    function renderResults(data) {
+      let html = '<h2 style="margin-top: 0; font-size: 18px;">📊 ダウンロード情報</h2>';
+      
+      if (data.title) {
+        html += `<div style="margin-bottom: 15px;">
+          <strong>タイトル:</strong> ${data.title}<br/>
+          <strong>再生時間:</strong> ${data.duration}秒 (${formatDuration(data.duration)})<br/>
+          ${data.uploader ? `<strong>アップロード者:</strong> ${data.uploader}<br/>` : ''}
+        </div>`;
+      }
+
+      html += '<h3 style="font-size: 16px; margin: 20px 0 10px;">利用可能なフォーマット</h3>';
+      
+      if (data.formats && data.formats.length > 0) {
+        html += data.formats.map(fmt => `
+          <div class="format-item">
+            <div class="format-info">
+              <div class="format-name">${fmt.format_note || fmt.format_id}</div>
+              <div class="format-detail">
+                ${fmt.width ? `${fmt.width}×${fmt.height}` : ''} 
+                ${fmt.fps ? `${fmt.fps}fps` : ''} 
+                ${fmt.filesize ? `${(fmt.filesize / 1024 / 1024).toFixed(1)}MB` : 'サイズ不明'}
+              </div>
+            </div>
+            <a href="/api/download/${data.video_id}?quality=${fmt.format_id}" class="btn-primary" style="padding: 8px 12px; text-decoration: none; color: white; font-size: 13px;">
+              ダウンロード
+            </a>
+          </div>
+        `).join('');
+      } else {
+        html += '<p>フォーマット情報を取得できませんでした</p>';
+      }
+
+      resultsDiv.innerHTML = html;
+    }
+
+    function formatDuration(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    function resetUI() {
+      resultsDiv.innerHTML = '';
+      currentData = null;
+      allFormats = [];
+    }
+
+    function applyFilters() {
+      if (!currentData) return;
+      
+      const qualityFilter = document.getElementById('qualityFilter').value;
+      const typeFilter = document.getElementById('typeFilter').value;
+      
+      let filtered = allFormats.filter(fmt => {
+        if (qualityFilter && fmt.height) {
+          if (qualityFilter === '1080' && fmt.height < 1080) return false;
+          if (qualityFilter === '720' && (fmt.height < 720 || fmt.height >= 1080)) return false;
+          if (qualityFilter === '480' && fmt.height > 480) return false;
+        }
+        if (typeFilter === 'video' && !fmt.vcodec) return false;
+        if (typeFilter === 'audio' && fmt.vcodec && fmt.vcodec !== 'none') return false;
+        return true;
+      });
+
+      currentData.formats = filtered;
+      renderResults(currentData);
+    }
+  </script>
+</body>
+</html>
