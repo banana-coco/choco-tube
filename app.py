@@ -1625,12 +1625,14 @@ def get_yt_dlp_base_opts(output_template, cookie_file=None):
             'Sec-Fetch-User': '?1',
             'Upgrade-Insecure-Requests': '1',
         },
-        'socket_timeout': 60,
-        'retries': 5,
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+        'socket_timeout': 90,
+        'retries': 10,
+        'extractor_args': {'youtube': {'player_client': ['mweb', 'android', 'web', 'tv', 'ios']}},
         'age_limit': None,
         'geo_bypass': True,
         'geo_bypass_country': 'JP',
+        'skip_unavailable_fragments': True,
+        'http_chunk_size': 10485760,
     }
     if cookie_file:
         opts['cookiefile'] = cookie_file
@@ -1692,12 +1694,14 @@ def api_internal_download(video_id):
                 'Sec-Fetch-User': '?1',
                 'Upgrade-Insecure-Requests': '1',
             },
-            'socket_timeout': 60,
-            'retries': 5,
-            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+            'socket_timeout': 90,
+            'retries': 10,
+            'extractor_args': {'youtube': {'player_client': ['mweb', 'android', 'web', 'tv', 'ios']}},
             'age_limit': None,
             'geo_bypass': True,
             'geo_bypass_country': 'JP',
+            'skip_unavailable_fragments': True,
+            'http_chunk_size': 10485760,
         }
 
         if format_type == 'mp3':
