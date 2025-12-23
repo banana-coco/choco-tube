@@ -233,17 +233,22 @@
         <div class="related-videos" id="relatedVideosContainer">
             {% if video and video.related %}
             {% for related in video.related %}
-            <a href="/{{ 'watch' if mode == 'stream' else ('w' if mode == 'high' else ('ume' if mode == 'embed' else 'edu')) }}?v={{ related.id }}" class="related-card dynamic-related-link" data-video-id="{{ related.id }}">
+            {% set vid_id = related.video_id or related.id %}
+            {% set vid_id_fallback = related.id %}
+            {% set auth_id = related.author_id or related.authorId %}
+            {% set length_val = related.length_text or related.length %}
+            {% set views_val = related.view_count_text or related.views %}
+            <a href="/{{ 'watch' if mode == 'stream' else ('w' if mode == 'high' else ('ume' if mode == 'embed' else 'edu')) }}?v={{ vid_id }}" class="related-card dynamic-related-link" data-video-id-new="{{ related.video_id }}" data-video-id-fallback="{{ vid_id_fallback }}">
                 <div class="related-thumbnail-container">
-                    <img src="/thumbnail?v={{ related.id }}" alt="{{ related.title }}" class="related-thumbnail" loading="lazy">
-                    {% if related.length %}
-                    <span class="video-duration">{{ related.length }}</span>
+                    <img src="/thumbnail?v={{ vid_id }}" alt="{{ related.title }}" class="related-thumbnail" loading="lazy">
+                    {% if length_val %}
+                    <span class="video-duration">{{ length_val }}</span>
                     {% endif %}
                 </div>
                 <div class="related-info">
                     <h4 class="related-title">{{ related.title }}</h4>
-                    <a href="/channel/{{ related.authorId }}" class="related-author">{{ related.author }}</a>
-                    <p class="related-views">{{ related.views }}</p>
+                    <a href="/channel/{{ auth_id }}" class="related-author">{{ related.author }}</a>
+                    <p class="related-views">{{ views_val }}</p>
                 </div>
             </a>
             {% endfor %}
@@ -567,7 +572,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (getCookie('autonext') === 'true') {
                 {% if video and video.related and video.related|length > 0 %}
                 setTimeout(function() {
-                    window.location.href = '/watch?v={{ video.related[0].id }}';
+                    window.location.href = '/watch?v={{ video.related[0].video_id or video.related[0].id }}';
                 }, 3000);
                 {% endif %}
             }
@@ -714,6 +719,43 @@ document.addEventListener('DOMContentLoaded', function() {
         eduSourceSelect.addEventListener('change', function() {
             setCookie('edu_source', this.value, 30);
             window.location.reload();
+        });
+    })();
+
+    // 関連動画リンク：新しいキーを3回試してからフォールバック
+    (function initRelatedVideoKeyRetry() {
+        document.addEventListener('click', function(e) {
+            const relatedLink = e.target.closest('.dynamic-related-link');
+            if (!relatedLink) return;
+            
+            const newKeyId = relatedLink.getAttribute('data-video-id-new');
+            const fallbackId = relatedLink.getAttribute('data-video-id-fallback');
+            
+            let finalId = fallbackId;
+            let retryCount = 0;
+            const maxRetries = 3;
+            
+            // 新しいキーを3回試す
+            while (retryCount < maxRetries) {
+                if (newKeyId && newKeyId.trim() !== '') {
+                    finalId = newKeyId;
+                    console.log(`Using new key ID (attempt ${retryCount + 1}): ${finalId}`);
+                    break;
+                }
+                retryCount++;
+            }
+            
+            // finalIdが空でなければURLを更新
+            if (finalId && finalId.trim() !== '') {
+                const url = relatedLink.href;
+                const pattern = /([?&])v=[^&]*/;
+                const newUrl = url.replace(pattern, (match) => {
+                    const prefix = match[0];
+                    return prefix + '=' + finalId;
+                });
+                relatedLink.href = newUrl;
+                console.log(`Final video ID to load: ${finalId}`);
+            }
         });
     })();
 });
