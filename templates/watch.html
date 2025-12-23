@@ -59,6 +59,9 @@
             </div>
 
             <div class="player-controls">
+                <button id="downloadMp4Btn" class="player-source-btn" title="MP4でダウンロード">
+                    <span>⬇️ MP4ダウンロード</span>
+                </button>
                 <a href="/watch?v={{ video_id }}" class="player-source-btn {% if mode == 'stream' %}active{% endif %}">
                     <span>🎬 ストリーム</span>
                 </a>
@@ -231,7 +234,7 @@
             <button id="chatToggleBtn" class="chat-toggle-btn" title="チャットに切り替える">💬 チャット</button>
         </div>
         <div class="related-videos" id="relatedVideosContainer">
-            {% if video and video.related %}
+            {% if video and video.related and video.related|length > 0 %}
             {% for related in video.related %}
             {% set vid_id = related.video_id or related.id %}
             {% set vid_id_fallback = related.id %}
@@ -252,6 +255,10 @@
                 </div>
             </a>
             {% endfor %}
+            {% else %}
+            <div style="padding: 16px; text-align: center; color: var(--text-secondary, #b8b8c8); font-size: 14px;">
+                関連動画が利用できません
+            </div>
             {% endif %}
         </div>
         <div class="chat-iframe-container" id="chatContainer">
@@ -264,10 +271,31 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
 <script>
+// MP4ダウンロード機能
+function initDownloadMp4() {
+    const downloadBtn = document.getElementById('downloadMp4Btn');
+    const videoId = '{{ video_id }}';
+    
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', function() {
+            const quality = prompt('画質を選択してください (1080, 720, 480, 360):', '720');
+            if (quality) {
+                const validQualities = ['1080', '720', '480', '360'];
+                const selectedQuality = validQualities.includes(quality) ? quality : '720';
+                window.location.href = `/api/download/${videoId}?format=video&quality=${selectedQuality}`;
+            }
+        });
+    }
+}
+</script>
+<script>
 document.addEventListener('DOMContentLoaded', function() {
     const videoId = '{{ video_id }}';
     const m3u8Url = '{{ streams.m3u8|default("", true) }}';
     const mode = '{{ mode }}';
+    
+    // Initialize MP4 download button
+    initDownloadMp4();
 
     const video = document.getElementById('video-player');
     let retryCount = 0;
