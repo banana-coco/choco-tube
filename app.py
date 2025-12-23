@@ -552,23 +552,25 @@ def get_ytdlp_video_info(video_id):
         opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': False, # 関連動画やコメントを取得するためにFalseに
+            'extract_flat': False,
             'socket_timeout': 30,
             'retries': 5,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Referer': 'https://www.google.com/',
             },
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios', 'web'],
+                    'player_client': ['android', 'ios', 'web', 'tv'],
                     'player_skip': ['webpage', 'configs'],
                 }
             },
             'geo_bypass': True,
             'geo_bypass_country': 'JP',
-            'getcomments': True, # コメント取得を有効化
+            'getcomments': True,
+            'nocheckcertificate': True,
         }
         
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -622,37 +624,72 @@ def get_ytdlp_video_info(video_id):
     
     return None
 
-def get_video_info(video_id):
-    """Get video info with fallback support - yt-dlp first (MIN-Tube2 integration)"""
-    # Try yt-dlp first (MIN-Tube2 integration)
-    ydlp_data = get_ytdlp_video_info(video_id)
+def format_related_video(related_data: dict) -> dict:
+    """参考リポジトリと同じ形式で関連動画をフォーマット"""
+    is_playlist = related_data.get("playlistId") and related_data.get("playlistId") != related_data.get("videoId")
     
-    # 関連動画の補完（Invidiousを使用）
+    thumbnail_vid_id = related_data.get('videoId') or related_data.get('playlistId')
+    thumbnail_url = f"https://i.ytimg.com/vi/{thumbnail_vid_id}/sddefault.jpg" if thumbnail_vid_id else 'https://i.ytimg.com/vi/mqdefault.jpg'
+    
+    if is_playlist:
+        return {
+            "type": "playlist",
+            "title": related_data.get("title", ''),
+            "id": related_data.get('playlistId', ''),
+            "author": related_data.get("channel", ''),
+            "thumbnail": thumbnail_url
+        }
+    
+    return {
+        "type": "video",
+        "id": related_data.get("videoId", ''),
+        "title": related_data.get("title", ''),
+        "author": related_data.get("channel", ''),
+        "authorId": related_data.get("channelId", ''),
+        "views": related_data.get("views", ''),
+        "thumbnail": thumbnail_url,
+        "length": related_data.get("badge", '')
+    }
+
+def get_video_info(video_id):
+    """Get video info with fallback support - 教育API優先 (参考リポジトリパターン)"""
+    # 1. Try 教育API first (yuzutube1パターン)
+    try:
+        res = http_session.get(f"{EDU_VIDEO_API}{video_id}", headers=get_random_headers(), timeout=(3, 8))
+        res.raise_for_status()
+        edu_data = res.json()
+        
+        author_data = edu_data.get('author', {})
+        author_thumbnail = author_data.get('thumbnail', '')
+        
+        # 関連動画を統一フォーマットで整形
+        recommended_videos = [format_related_video(i) for i in edu_data.get('related', [])[:20]]
+        
+        return {
+            'title': edu_data.get('title', ''),
+            'description': edu_data.get('description', {}).get('formatted', ''),
+            'author': author_data.get('name', ''),
+            'authorId': author_data.get('id', ''),
+            'authorThumbnail': author_thumbnail,
+            'views': edu_data.get('views', 0),
+            'likes': edu_data.get('likes', 0),
+            'subscribers': author_data.get('subscribers', ''),
+            'published': edu_data.get('relativeDate', ''),
+            'lengthText': '',
+            'related': recommended_videos,
+            'videoUrls': [],
+            'streamUrls': [],
+            'highstreamUrl': None,
+            'audioUrl': None,
+            'source': 'edu_api'
+        }
+    except Exception as e:
+        print(f"教育API error: {e}")
+    
+    # 2. Fallback to Invidious API
     path = f"/videos/{urllib.parse.quote(video_id)}"
     inv_data = request_invidious_api(path, timeout=(3, 8))
     
-    if ydlp_data:
-        if inv_data and not ydlp_data.get('related'):
-            recommended = inv_data.get('recommendedVideos', inv_data.get('recommended', []))
-            related = []
-            for item in recommended[:20]:
-                try:
-                    rel_id = item.get('videoId', item.get('id', ''))
-                    if rel_id:
-                        related.append({
-                            'id': rel_id,
-                            'title': item.get('title', ''),
-                            'author': item.get('author', ''),
-                            'authorId': item.get('authorId', ''),
-                            'views': item.get('viewCountText', ''),
-                            'thumbnail': f"https://i.ytimg.com/vi/{rel_id}/mqdefault.jpg",
-                            'length': str(datetime.timedelta(seconds=item.get('lengthSeconds', 0))) if item.get('lengthSeconds') else ''
-                        })
-                except: continue
-            ydlp_data['related'] = related
-        return ydlp_data
-    
-    # Fallback to Invidious API
     if inv_data:
         # Invidiousの結果を標準形式に変換して返す
         related_videos = []
@@ -706,159 +743,22 @@ def get_video_info(video_id):
             'videoUrls': [stream.get('url', '') for stream in reversed(inv_data.get('formatStreams', []))][:2],
             'streamUrls': stream_urls,
             'highstreamUrl': highstream_url,
-            'audioUrl': audio_url
+            'audioUrl': audio_url,
+            'source': 'invidious'
         }
 
-    # Fallback to Piped API
+    # 3. Fallback to Piped API
     piped_path = f"/streams/{urllib.parse.quote(video_id)}"
     piped_data = request_piped_api(piped_path, timeout=(5, 15))
     if piped_data:
         return _parse_piped_video_info(video_id, piped_data)
 
-    try:
-        res = http_session.get(f"{EDU_VIDEO_API}{video_id}", headers=get_random_headers(), timeout=(2, 6))
-        res.raise_for_status()
-        edu_data = res.json()
-
-        related_videos = []
-        for item in edu_data.get('related', [])[:20]:
-            try:
-                vid_id = item.get('videoId', '')
-                if not vid_id:
-                    continue
-                related_videos.append({
-                    'id': vid_id,
-                    'title': item.get('title', ''),
-                    'author': item.get('channel', ''),
-                    'authorId': item.get('channelId', ''),
-                    'views': item.get('views', ''),
-                    'thumbnail': f"https://i.ytimg.com/vi/{vid_id}/mqdefault.jpg",
-                    'length': ''
-                })
-            except Exception as e:
-                print(f"Error processing EDU related video: {e}")
-                continue
-
-        return {
-            'title': edu_data.get('title', ''),
-            'description': edu_data.get('description', {}).get('formatted', ''),
-            'author': edu_data.get('author', {}).get('name', ''),
-            'authorId': edu_data.get('author', {}).get('id', ''),
-            'authorThumbnail': edu_data.get('author', {}).get('thumbnail', ''),
-            'views': edu_data.get('views', ''),
-            'likes': edu_data.get('likes', ''),
-            'subscribers': edu_data.get('author', {}).get('subscribers', ''),
-            'published': edu_data.get('relativeDate', ''),
-            'related': related_videos,
-            'streamUrls': [],
-            'highstreamUrl': None,
-            'audioUrl': None,
-            'm3u8Url': None
-        }
-    except Exception as e:
-        print(f"EDU Video API error: {e}")
-        return None
-
-    # 複数の形式の関連動画フィールドに対応
-    r_videos = inv_data.get('recommendedVideos', inv_data.get('recommendedvideo', inv_data.get('recommended', [])))
-    related_videos = []
+    # 4. Fallback to yt-dlp
+    ydlp_data = get_ytdlp_video_info(video_id)
+    if ydlp_data:
+        return ydlp_data
     
-    if r_videos and isinstance(r_videos, list):
-        for item in r_videos[:20]:
-            try:
-                if not isinstance(item, dict):
-                    continue
-                
-                # videoIdを複数の形式でサポート
-                r_v_id = item.get('videoId', item.get('id', ''))
-                if not r_v_id:
-                    continue
-                
-                l_seconds = item.get('lengthSeconds', item.get('duration', 0))
-                
-                # サムネイルURLの取得
-                r_thumbnail = item.get('thumbnail', f"https://i.ytimg.com/vi/{r_v_id}/mqdefault.jpg")
-                if not r_thumbnail or r_thumbnail.startswith('http') is False:
-                    r_thumbnail = f"https://i.ytimg.com/vi/{r_v_id}/mqdefault.jpg"
-                
-                related_videos.append({
-                    'id': r_v_id,
-                    'title': item.get('title', ''),
-                    'author': item.get('author', item.get('uploader', '')),
-                    'authorId': item.get('authorId', ''),
-                    'views': item.get('viewCountText', item.get('views', '')),
-                    'thumbnail': r_thumbnail,
-                    'length': str(datetime.timedelta(seconds=l_seconds)) if l_seconds else ''
-                })
-            except: continue
-    
-    # If Invidious returned results but no related videos, try Piped for related videos
-    if not related_videos:
-        try:
-            p_path = f"/streams/{urllib.parse.quote(video_id)}"
-            p_data = request_piped_api(p_path, timeout=(5, 15))
-            if p_data:
-                p_related = p_data.get('relatedStreams', [])
-                for rel in p_related[:20]:
-                    try:
-                        r_v_id = rel.get('id') or (rel.get('url').split('=')[-1] if '=' in rel.get('url', '') else rel.get('url', '').split('/')[-1])
-                        if r_v_id:
-                            related_videos.append({
-                                'id': r_v_id,
-                                'title': rel.get('title', ''),
-                                'author': rel.get('uploader', ''),
-                                'authorId': rel.get('uploaderUrl', '').split('/')[-1] if '/' in rel.get('uploaderUrl', '') else '',
-                                'views': str(rel.get('views', '')),
-                                'thumbnail': rel.get('thumbnail', ''),
-                                'length': str(datetime.timedelta(seconds=rel.get('duration', 0))) if rel.get('duration') else ''
-                            })
-                    except: continue
-        except: pass
-
-    a_formats = inv_data.get('adaptiveFormats', [])
-    s_urls = []
-    h_s_url = None
-    a_url = None
-
-    for stream in a_formats:
-        if stream.get('container') == 'webm' and stream.get('resolution'):
-            s_urls.append({
-                'url': stream.get('url', ''),
-                'resolution': stream.get('resolution', '')
-            })
-            if stream.get('resolution') == '1080p' and not h_s_url:
-                h_s_url = stream.get('url')
-            elif stream.get('resolution') == '720p' and not h_s_url:
-                h_s_url = stream.get('url')
-
-    for stream in a_formats:
-        if stream.get('container') == 'm4a' and stream.get('audioQuality') == 'AUDIO_QUALITY_MEDIUM':
-            a_url = stream.get('url')
-            break
-
-    f_streams = inv_data.get('formatStreams', [])
-    v_urls = [stream.get('url', '') for stream in reversed(f_streams)][:2]
-
-    a_thumbnails = inv_data.get('authorThumbnails', [])
-    a_thumbnail = a_thumbnails[-1].get('url', '') if a_thumbnails else ''
-
-    return {
-        'title': inv_data.get('title', ''),
-        'description': inv_data.get('descriptionHtml', '').replace('\n', '<br>'),
-        'author': inv_data.get('author', ''),
-        'authorId': inv_data.get('authorId', ''),
-        'authorThumbnail': a_thumbnail,
-        'views': inv_data.get('viewCount', 0),
-        'likes': inv_data.get('likeCount', 0),
-        'subscribers': inv_data.get('subCountText', ''),
-        'published': inv_data.get('publishedText', ''),
-        'lengthText': str(datetime.timedelta(seconds=inv_data.get('lengthSeconds', 0))),
-        'related': related_videos,
-        'videoUrls': v_urls,
-        'streamUrls': s_urls,
-        'highstreamUrl': h_s_url,
-        'audioUrl': a_url
-    }
+    return None
 
 def get_playlist_info(playlist_id):
     path = f"/playlists/{urllib.parse.quote(playlist_id)}"
@@ -1018,7 +918,7 @@ def get_ytdlp_stream_url(video_id):
             },
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios', 'web'],
+                    'player_client': ['android', 'ios', 'web', 'tv'],
                     'player_skip': ['webpage', 'configs'],
                 }
             },
@@ -1047,7 +947,64 @@ def get_ytdlp_stream_url(video_id):
     
     return None
 
+def fetch_high_quality_streams(video_id: str):
+    """参考リポジトリパターンで高品質m3u8ストリームを取得"""
+    try:
+        API_URL = f"https://yudlp-ygug.onrender.com/m3u8/{video_id}"
+        response = http_session.get(API_URL, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        
+        m3u8_formats = data.get('m3u8_formats', [])
+        
+        if not m3u8_formats:
+            return None
+        
+        def get_height(f):
+            resolution_str = f.get('resolution', '0x0')
+            try:
+                return int(resolution_str.split('x')[-1]) if 'x' in resolution_str else 0
+            except ValueError:
+                return 0
+        
+        m3u8_formats_sorted = sorted(
+            [f for f in m3u8_formats if f.get('url')],
+            key=get_height,
+            reverse=True
+        )
+        
+        if m3u8_formats_sorted:
+            best_m3u8 = m3u8_formats_sorted[0]
+            return {
+                'video_url': best_m3u8['url'],
+                'resolution': best_m3u8.get('resolution', 'Highest Quality')
+            }
+    except Exception as e:
+        print(f"高品質ストリーム取得エラー: {e}")
+    
+    return None
+
+def get_360p_single_url(video_id: str):
+    """参考リポジトリパターンで360p単一ストリームを取得"""
+    try:
+        API_URL = f"https://yudlp-ygug.onrender.com/stream/{video_id}"
+        response = http_session.get(API_URL, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        
+        formats = data.get('formats', [])
+        
+        # itag 18 = 360pのMP4
+        for fmt in formats:
+            if fmt.get('itag') == '18' and fmt.get('url'):
+                return fmt['url']
+    except Exception as e:
+        print(f"360pストリーム取得エラー: {e}")
+    
+    return None
+
 def get_stream_url(video_id, edu_source='siawaseok'):
+    """参考リポジトリパターン: ytdlp APIとm3u8 API優先"""
     edu_params = get_edu_params(edu_source)
     urls = {
         'primary': None,
@@ -1057,22 +1014,39 @@ def get_stream_url(video_id, edu_source='siawaseok'):
         'education': f"https://www.youtubeeducation.com/embed/{video_id}?{edu_params}"
     }
 
-    # 1. Try yt-dlp with updated robust options (MIN-Tube2 style)
+    # 1. Try high quality m3u8 stream first (参考リポジトリパターン)
+    try:
+        high_quality = fetch_high_quality_streams(video_id)
+        if high_quality and high_quality.get('video_url'):
+            urls['m3u8'] = high_quality['video_url']
+            urls['primary'] = high_quality['video_url']
+            return urls
+    except:
+        pass
+
+    # 2. Try 360p single stream as fallback
+    try:
+        single_url = get_360p_single_url(video_id)
+        if single_url:
+            urls['primary'] = single_url
+            return urls
+    except:
+        pass
+
+    # 3. Try yt-dlp as additional fallback
     ydlp_result = get_ytdlp_stream_url(video_id)
     if ydlp_result and ydlp_result.get('url'):
         if ydlp_result.get('is_m3u8'):
             urls['m3u8'] = ydlp_result['url']
         urls['primary'] = ydlp_result['url']
-        # If we got a good URL, we can return early
         return urls
 
-    # 2. Try Piped API for streams as fallback
+    # 4. Try Piped API
     try:
         piped_data = request_piped_api(f"/streams/{video_id}")
         if piped_data:
             if piped_data.get('hls'):
                 urls['m3u8'] = piped_data['hls']
-            
             formats = piped_data.get('formats', [])
             for fmt in formats:
                 if fmt.get('videoOnly') is False:
@@ -1082,20 +1056,6 @@ def get_stream_url(video_id, edu_source='siawaseok'):
                     break
     except:
         pass
-
-    # 3. Last resort fallback to other APIs
-    if not urls['primary']:
-        try:
-            res = http_session.get(f"{STREAM_API}{video_id}", headers=get_random_headers(), timeout=(3, 6))
-            if res.status_code == 200:
-                data = res.json()
-                formats = data.get('formats', [])
-                for fmt in formats:
-                    if fmt.get('itag') == '18':
-                        urls['primary'] = fmt.get('url')
-                        break
-        except:
-            pass
 
     return urls
 
@@ -1112,15 +1072,17 @@ def get_ytdlp_comments(video_id):
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Referer': 'https://www.google.com/',
             },
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios', 'web'],
+                    'player_client': ['android', 'ios', 'web', 'tv'],
                     'player_skip': ['webpage', 'configs'],
                 }
             },
             'geo_bypass': True,
             'geo_bypass_country': 'JP',
+            'nocheckcertificate': True,
         }
         
         with yt_dlp.YoutubeDL(opts) as ydl:
